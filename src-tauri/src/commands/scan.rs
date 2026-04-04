@@ -45,3 +45,19 @@ pub async fn scan_network(cidr: String) -> Result<ScanResult, String> {
         duration,
     })
 }
+
+/// Return the local machine's /24 subnet in CIDR notation (e.g. "192.168.1.0/24").
+#[command]
+pub fn get_local_subnet() -> Result<String, String> {
+    use local_ip_address::local_ip;
+    let ip = local_ip().map_err(|e| e.to_string())?;
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            let o = v4.octets();
+            Ok(format!("{}.{}.{}.0/24", o[0], o[1], o[2]))
+        }
+        std::net::IpAddr::V6(_) => {
+            Err("IPv6 not supported for subnet detection".to_string())
+        }
+    }
+}

@@ -3,6 +3,7 @@ import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import Miners from "./pages/Miners";
 import Settings from "./pages/Settings";
+import MinerDetail from "./pages/MinerDetail";
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/miners" element={<Miners />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/miner/:ip" element={<MinerDetail />} />
           </Routes>
         </main>
       </div>

@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import popIcon from "../assets/icon.png";
 
 const navItems = [
   {
@@ -35,8 +36,10 @@ export default function Sidebar() {
   return (
     <aside className="w-64 bg-dark-900 border-r border-slate-700/50 flex flex-col">
       <div className="p-6 border-b border-slate-700/50">
-        <h1 className="text-xl font-bold text-white">PoPManager</h1>
-        <p className="text-xs text-slate-400 mt-1">by Proof of Prints</p>
+        <div className="flex items-center gap-3">
+          <img src={popIcon} alt="PoPManager" className="w-8 h-8" />
+          <h1 className="text-xl font-bold text-white">PoPManager</h1>
+        </div>
       </div>
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map((item) => (

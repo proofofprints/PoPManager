@@ -2,21 +2,19 @@ use serde::{Deserialize, Serialize};
 use tauri::command;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct PoolConfig {
-    pub url: String,
+pub struct PoolSlot {
+    pub no: u32,
+    pub addr: String,
     pub user: String,
-    pub password: String,
+    pub pass: String,
 }
 
-/// Configure the mining pool on a miner.
+/// Configure mining pools on a miner.
 /// Stub: will POST to the Iceriver API once endpoint is confirmed.
 #[command]
-pub async fn configure_pool(
-    ip: String,
-    config: PoolConfig,
-) -> Result<(), String> {
-    // TODO: POST to Iceriver KS0 pool config endpoint
-    // e.g., POST /user/userpanel?post=<n> with pool fields
-    log::info!("Configuring pool on {}: {} / {}", ip, config.url, config.user);
+pub async fn configure_pool(ip: String, pools: Vec<PoolSlot>) -> Result<(), String> {
+    for p in &pools {
+        log::info!("Configuring pool slot {} on {}: {} / {}", p.no, ip, p.addr, p.user);
+    }
     Ok(())
 }

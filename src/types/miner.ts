@@ -1,38 +1,78 @@
 export type MinerStatus = "online" | "offline" | "warning" | "unknown";
 
 export interface PoolInfo {
-  url: string;
+  no: number;
+  addr: string;
   user: string;
-  status: string;
+  pass: string;
+  connect: boolean;
+  diff: string;
+  accepted: number;
+  rejected: number;
+  state: number; // 1 = active
 }
 
-export interface HashrateBoard {
-  id: number;
-  hashrate: number; // in GH/s
-  temperature: number; // in Celsius
-  fanSpeed: number; // RPM
+export interface BoardInfo {
+  no: number;
+  chipNum: number;
+  freq: number;
+  rtPow: string;
+  rtPowValue: number;
+  inTmp: number;
+  outTmp: number;
+  state: boolean;
+}
+
+export interface HashrateHistory {
+  board: string;
+  values: number[];
+  labels: string[];
+}
+
+export interface HealthState {
+  power: boolean;
+  network: boolean;
+  fan: boolean;
+  temp: boolean;
 }
 
 export interface MinerInfo {
   ip: string;
   hostname: string;
+  mac: string;
   model: string;
   status: MinerStatus;
-  totalHashrate: number; // in GH/s
-  boards: HashrateBoard[];
+  firmware: string;
+  software: string;
+  online: boolean;
+  rtHashrate: number;
+  avgHashrate: number;
+  hashrateUnit: string;
+  runtime: string;
+  runtimeSecs: number;
+  fans: number[];
+  boards: BoardInfo[];
   pools: PoolInfo[];
-  uptime: number; // in seconds
-  lastSeen: string; // ISO timestamp
+  hashrateHistory: HashrateHistory[];
+  health: HealthState;
+  lastSeen: string;
 }
 
 export interface ScanResult {
   found: MinerInfo[];
   scannedRange: string;
-  duration: number; // ms
+  duration: number;
 }
 
-export interface PoolConfig {
-  url: string;
+export interface PoolSlot {
+  no: number;
+  addr: string;
   user: string;
-  password: string;
+  pass: string;
+}
+
+export interface SavedMiner {
+  ip: string;
+  label: string;
+  added_at: string;
 }
