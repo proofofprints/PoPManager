@@ -14,6 +14,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import type { MinerInfo, SavedMiner, CoinConfig, PoolProfile, UptimeStats } from "../types/miner";
 import { getMinerCoinId } from "../utils/coinLookup";
+import { getCoinIcon } from "../utils/coinIcon";
 import { profileToPayload } from "../types/miner";
 import { useAlerts } from "../context/AlertContext";
 import type { MinerSnapshot } from "../types/alerts";
@@ -101,6 +102,7 @@ function MinerCard({
   selected,
   onSelect,
   uptimeStats,
+  coinIcon,
 }: {
   miner: MinerInfo;
   displayName: string;
@@ -109,6 +111,7 @@ function MinerCard({
   selected: boolean;
   onSelect: () => void;
   uptimeStats?: UptimeStats;
+  coinIcon?: string | null;
 }) {
   const statusColor =
     {
@@ -168,7 +171,10 @@ function MinerCard({
 
       <div className={`flex items-start justify-between mb-4 ${selectionMode ? "pr-8" : ""}`}>
         <div>
-          <h3 className="font-semibold text-white">{displayName}</h3>
+          <h3 className="font-semibold text-white flex items-center gap-1.5">
+              {coinIcon && <img src={coinIcon} alt="coin" className="w-4 h-4 rounded-full flex-shrink-0" />}
+              {displayName}
+            </h3>
           <p className="text-sm text-slate-400">
             {miner.ip} · {miner.model}
           </p>
@@ -271,6 +277,7 @@ function MinerTable({
   sortDir,
   onSort,
   uptimeStats,
+  coinIconByIp,
 }: {
   data: MinerWithSaved[];
   selectedIps: Set<string>;
@@ -280,6 +287,7 @@ function MinerTable({
   sortDir: SortDir;
   onSort: (col: string) => void;
   uptimeStats: Record<string, UptimeStats>;
+  coinIconByIp?: Record<string, string | null>;
 }) {
   const statusBg = (status: string) =>
     ({
@@ -395,6 +403,7 @@ function MinerTable({
             <Th col="name" label="Name" />
             <Th col="ip" label="IP Address" />
             <Th col="status" label="Status" />
+            <Th col="coin" label="Coin" className="hidden md:table-cell" />
             <Th col="hashrate" label="Hashrate" />
             <Th col="temp" label="Avg Temp" />
             <Th col="pool" label="Pool" className="hidden lg:table-cell" />
@@ -464,6 +473,11 @@ function MinerTable({
                     <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
                     {info.status}
                   </span>
+                </td>
+                <td className="px-4 py-3 hidden md:table-cell">
+                  {coinIconByIp?.[info.ip] && (
+                    <img src={coinIconByIp[info.ip]!} alt="coin" className="w-5 h-5 rounded-full" />
+                  )}
                 </td>
                 <td className="px-4 py-3 text-sm text-white">
                   {info.rtHashrate}{" "}
@@ -562,7 +576,7 @@ export default function MinerList() {
       if (saved.length === 0) return;
       const results = await Promise.allSettled(
         saved.map((s) =>
-          invoke<MinerInfo>("get_miner_status", { ip: s.ip }).then((info) => ({ info, saved: s }))
+          invoke<MinerInfo>("get_miner_status", { ip: s.ip, manufacturer: s.manufacturer ?? "unknown" }).then((info) => ({ info, saved: s }))
         )
       );
       const data: MinerWithSaved[] = results
@@ -783,6 +797,16 @@ export default function MinerList() {
       return 0;
     });
   }, [filteredData, sortCol, sortDir]);
+
+  const coinIconByIp = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const { info, saved } of sortedData) {
+      const activePoolAddr = info.pools.find((p) => p.connect || p.state === 1)?.addr;
+      const coinId = getMinerCoinId(activePoolAddr, poolProfiles, saved?.coin_id);
+      map[info.ip] = getCoinIcon(coinId);
+    }
+    return map;
+  }, [sortedData, poolProfiles]);
 
   function handleSort(col: string) {
     if (sortCol === col) {
@@ -1195,6 +1219,7 @@ export default function MinerList() {
           sortDir={sortDir}
           onSort={handleSort}
           uptimeStats={allUptimeStats}
+          coinIconByIp={coinIconByIp}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -1208,6 +1233,7 @@ export default function MinerList() {
               selected={selectedIps.has(d.info.ip)}
               onSelect={() => toggleSelect(d.info.ip)}
               uptimeStats={allUptimeStats[d.info.ip]}
+              coinIcon={coinIconByIp[d.info.ip]}
             />
           ))}
         </div>

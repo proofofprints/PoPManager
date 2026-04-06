@@ -1,5 +1,8 @@
 mod commands;
 
+use tauri::Manager;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri_plugin_log::{Target, TargetKind};
 use commands::{
     miner::get_miner_status,
@@ -24,6 +27,7 @@ use commands::email::{get_smtp_config, save_smtp_config, test_smtp_config, send_
 use commands::notifications::send_desktop_notification;
 use commands::uptime::{record_uptime, get_uptime_stats, get_all_uptime_stats, clear_uptime_data};
 use commands::export::{export_miners_csv, export_alert_history_csv, export_profitability_csv, export_farm_history_csv};
+use commands::tray::{TrayState, update_tray_tooltip};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -48,7 +52,73 @@ pub fn run() {
                 let identifier = app.config().identifier.clone();
                 commands::notifications::setup_windows_aumid(&identifier, "PoPManager");
             }
-            let _ = app;
+
+            // Load preferences and initialise managed tray state.
+            let prefs = commands::preferences::load_prefs_sync(app.handle());
+            app.manage(TrayState {
+                minimize_to_tray: std::sync::Mutex::new(prefs.minimize_to_tray),
+            });
+
+            // Build the system tray menu.
+            let show = MenuItem::with_id(app, "show", "Open PoPManager", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
+
+            TrayIconBuilder::with_id("main-tray")
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .tooltip("PoPManager - Mining Manager")
+                .on_menu_event(|app: &tauri::AppHandle, event: tauri::menu::MenuEvent| {
+                    match event.id.as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                                log::info!("Restoring PoPManager from system tray");
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event: TrayIconEvent| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            log::info!("Restoring PoPManager from system tray (click)");
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // Intercept the window close button: hide to tray instead of quitting
+            // (when minimize_to_tray is enabled).
+            let app_handle = app.handle().clone();
+            if let Some(window) = app.get_webview_window("main") {
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        let tray_state = app_handle.state::<TrayState>();
+                        let minimize = *tray_state.minimize_to_tray.lock().unwrap();
+                        if minimize {
+                            api.prevent_close();
+                            if let Some(win) = app_handle.get_webview_window("main") {
+                                log::info!("Minimizing PoPManager to system tray");
+                                let _ = win.hide();
+                            }
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -103,6 +173,7 @@ pub fn run() {
             export_profitability_csv,
             export_farm_history_csv,
             set_log_level,
+            update_tray_tooltip,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

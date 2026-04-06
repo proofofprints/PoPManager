@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type { MinerInfo, SavedMiner, CoinEarnings, CoinConfig, FarmSnapshot, UptimeStats } from "../types/miner";
 import { getMinerCoinId } from "../utils/coinLookup";
+import { getCoinIcon } from "../utils/coinIcon";
 import { useAlerts } from "../context/AlertContext";
 import { useProfitability } from "../context/ProfitabilityContext";
 import type { MinerSnapshot } from "../types/alerts";
@@ -102,7 +103,7 @@ export default function Dashboard() {
     info(`Poll cycle start: ${saved.length} miner(s)`).catch(() => {});
     const results = await Promise.allSettled(
       saved.map((s) =>
-        invoke<MinerInfo>("get_miner_status", { ip: s.ip }).then((info) => ({ info, saved: s }))
+        invoke<MinerInfo>("get_miner_status", { ip: s.ip, manufacturer: s.manufacturer ?? "unknown" }).then((info) => ({ info, saved: s }))
       )
     );
     const data: MinerWithSaved[] = results
@@ -426,6 +427,12 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {fleetUptime !== null && (
+        <p className="text-xs italic text-slate-500 -mt-4 mb-2">
+          Uptime tracked while PoPManager is running
+        </p>
+      )}
+
       {/* Profitability summary */}
       <div className="mb-6 bg-dark-800 rounded-xl border border-slate-700/50 p-5">
         <div className="flex items-center justify-between mb-4">
@@ -666,7 +673,12 @@ export default function Dashboard() {
                     >
                       <div className="flex items-start justify-between mb-4">
                         <div>
-                          <h4 className="font-semibold text-white">{displayName}</h4>
+                          <h4 className="font-semibold text-white flex items-center gap-1.5">
+                            {getCoinIcon(coinId) && (
+                              <img src={getCoinIcon(coinId)!} alt={ticker} className="w-5 h-5 rounded-full flex-shrink-0" />
+                            )}
+                            {displayName}
+                          </h4>
                           <p className="text-xs text-slate-400 mt-0.5">
                             {count} miner{count !== 1 ? "s" : ""}
                           </p>
@@ -775,10 +787,14 @@ export default function Dashboard() {
                         >
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-2">
-                              <span
-                                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                style={{ backgroundColor: color }}
-                              />
+                              {getCoinIcon(coinId) ? (
+                                <img src={getCoinIcon(coinId)!} alt={ticker} className="w-4 h-4 rounded-full flex-shrink-0" />
+                              ) : (
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: color }}
+                                />
+                              )}
                               <span className="text-white font-medium">{displayName}</span>
                             </div>
                           </td>

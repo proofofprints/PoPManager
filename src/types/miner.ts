@@ -81,6 +81,8 @@ export interface MinerInfo {
   health: HealthState;
   lastSeen: string;
   defaultWattage: number;
+  manufacturer?: string;
+  hwErrors?: number;
 }
 
 export interface ScanResult {
@@ -102,6 +104,7 @@ export interface SavedMiner {
   added_at: string;
   coin_id: string;
   wattage?: number;
+  manufacturer?: string;
 }
 
 export interface EarningsEstimate {
@@ -168,6 +171,7 @@ export interface AppPreferences {
   electricityCostPerKwh: number;
   minerWattage: number;
   logLevel?: string;
+  minimizeToTray?: boolean;
 }
 
 export interface CoinSnapshot {

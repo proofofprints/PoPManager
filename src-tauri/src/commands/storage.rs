@@ -12,6 +12,8 @@ pub struct SavedMiner {
     pub coin_id: String,
     #[serde(default = "default_wattage")]
     pub wattage: f64,
+    #[serde(default)]
+    pub manufacturer: String,
 }
 
 fn default_coin_id() -> String {
@@ -59,7 +61,7 @@ pub fn get_saved_miners() -> Result<Vec<SavedMiner>, String> {
 }
 
 #[tauri::command]
-pub fn add_miner(ip: String, label: Option<String>, coin_id: Option<String>, wattage: Option<f64>) -> Result<Vec<SavedMiner>, String> {
+pub fn add_miner(ip: String, label: Option<String>, coin_id: Option<String>, wattage: Option<f64>, manufacturer: Option<String>) -> Result<Vec<SavedMiner>, String> {
     let mut miners = load_miners();
     if miners.iter().any(|m| m.ip == ip) {
         return Ok(miners);
@@ -71,6 +73,7 @@ pub fn add_miner(ip: String, label: Option<String>, coin_id: Option<String>, wat
         added_at: Utc::now().to_rfc3339(),
         coin_id: coin_id.unwrap_or_else(|| "kaspa".to_string()),
         wattage: wattage.unwrap_or(100.0),
+        manufacturer: manufacturer.unwrap_or_default(),
     });
     save_miners(&miners)?;
     Ok(miners)
@@ -105,10 +108,10 @@ pub fn update_miner_label(ip: String, label: String) -> Result<Vec<SavedMiner>, 
 }
 
 #[tauri::command]
-pub fn import_from_scan(ips: Vec<String>, coin_id: Option<String>) -> Result<Vec<SavedMiner>, String> {
+pub fn import_from_scan(ips: Vec<String>, manufacturers: Option<Vec<String>>, coin_id: Option<String>) -> Result<Vec<SavedMiner>, String> {
     let mut miners = load_miners();
     let coin = coin_id.unwrap_or_else(|| "kaspa".to_string());
-    for ip in ips {
+    for (idx, ip) in ips.into_iter().enumerate() {
         if !miners.iter().any(|m| m.ip == ip) {
             miners.push(SavedMiner {
                 label: ip.clone(),
@@ -116,6 +119,10 @@ pub fn import_from_scan(ips: Vec<String>, coin_id: Option<String>) -> Result<Vec
                 added_at: Utc::now().to_rfc3339(),
                 coin_id: coin.clone(),
                 wattage: 100.0,
+                manufacturer: manufacturers.as_ref()
+                    .and_then(|m| m.get(idx))
+                    .cloned()
+                    .unwrap_or_default(),
             });
         }
     }

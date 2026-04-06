@@ -180,6 +180,10 @@ pub struct MinerInfo {
     pub health: HealthState,
     pub last_seen: String,
     pub default_wattage: f64,
+    #[serde(default)]
+    pub manufacturer: String,
+    #[serde(default)]
+    pub hw_errors: u64,
 }
 
 // ---- Helpers ----
@@ -283,7 +287,7 @@ fn detect_model_and_wattage(softver: &str, api_model: &str) -> (String, f64) {
 }
 
 /// Fetch live status from an Iceriver miner at the given IP.
-pub async fn fetch_miner_info(ip: String) -> Result<MinerInfo, String> {
+pub async fn fetch_iceriver_info(ip: String) -> Result<MinerInfo, String> {
     let url = format!("http://{}/user/userpanel?post=4", ip);
 
     let client = reqwest::Client::builder()
@@ -395,11 +399,33 @@ pub async fn fetch_miner_info(ip: String) -> Result<MinerInfo, String> {
         },
         last_seen: now,
         default_wattage,
+        manufacturer: "iceriver".to_string(),
+        hw_errors: 0,
     })
 }
 
 /// Tauri command: fetch status for a single miner by IP.
+/// If manufacturer is None or "unknown", auto-detects by trying each protocol in sequence.
 #[command]
-pub async fn get_miner_status(ip: String) -> Result<MinerInfo, String> {
-    fetch_miner_info(ip).await
+pub async fn get_miner_status(ip: String, manufacturer: Option<String>) -> Result<MinerInfo, String> {
+    let mfr = manufacturer.as_deref().unwrap_or("unknown");
+    match mfr {
+        "iceriver" => fetch_iceriver_info(ip).await,
+        "whatsminer" => super::whatsminer::fetch_whatsminer_info(&ip).await,
+        "antminer" => super::antminer::fetch_antminer_info(&ip).await,
+        _ => {
+            // Auto-detect: try each in sequence
+            log::info!("Auto-detecting manufacturer for {}", ip);
+            if let Ok(info) = fetch_iceriver_info(ip.clone()).await {
+                return Ok(info);
+            }
+            if let Ok(info) = super::whatsminer::fetch_whatsminer_info(&ip).await {
+                return Ok(info);
+            }
+            if let Ok(info) = super::antminer::fetch_antminer_info(&ip).await {
+                return Ok(info);
+            }
+            Err(format!("Could not connect to miner at {}", ip))
+        }
+    }
 }

@@ -60,13 +60,14 @@ export default function Monitoring() {
     setAdding(true);
     setAddError(null);
     try {
-      // Verify reachable first
-      await invoke("get_miner_status", { ip });
+      // Verify reachable first and detect manufacturer
+      const info = await invoke<MinerInfo>("get_miner_status", { ip, manufacturer: null });
       const updated = await invoke<SavedMiner[]>("add_miner", {
         ip,
         label: addLabel.trim() || null,
         coinId: "other",
         wattage: addWattage,
+        manufacturer: info.manufacturer || null,
       });
       setSavedMiners(updated);
       setAddIp("");
@@ -108,7 +109,8 @@ export default function Monitoring() {
         : scannedMiners.map((m) => m.ip);
     if (!ips.length) return;
     try {
-      const updated = await invoke<SavedMiner[]>("import_from_scan", { ips, coinId: "other" });
+      const manufacturers = ips.map((ip) => scannedMiners.find((m) => m.ip === ip)?.manufacturer ?? "");
+      const updated = await invoke<SavedMiner[]>("import_from_scan", { ips, manufacturers, coinId: "other" });
       setSavedMiners(updated);
       setSelectedIps(new Set());
       // Update wattages for newly imported miners from scan data
@@ -403,6 +405,7 @@ export default function Monitoring() {
                 </th>
                 <th className="text-left px-6 py-3">IP / Host</th>
                 <th className="text-left px-6 py-3">Model</th>
+                <th className="text-left px-6 py-3">Manufacturer</th>
                 <th className="text-left px-6 py-3">Status</th>
                 <th className="text-right px-6 py-3">Hashrate</th>
                 <th className="text-right px-6 py-3">Temp °C</th>
@@ -440,6 +443,7 @@ export default function Monitoring() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-slate-300">{m.model}</td>
+                    <td className="px-6 py-4 text-slate-400 text-xs capitalize">{m.manufacturer || "--"}</td>
                     <td className="px-6 py-4">
                       <span
                         className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${

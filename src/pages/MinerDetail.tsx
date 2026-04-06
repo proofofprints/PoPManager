@@ -15,6 +15,7 @@ import type { MinerInfo, CoinEarnings, PoolProfile, SavedMiner, UptimeStats, Coi
 import { profileToPayload } from "../types/miner";
 import { useProfitability } from "../context/ProfitabilityContext";
 import { getMinerCoinId } from "../utils/coinLookup";
+import { getCoinIcon } from "../utils/coinIcon";
 
 const POLL_INTERVAL_MS = 45_000;
 
@@ -365,6 +366,9 @@ export default function MinerDetail() {
               )}
             </div>
           </div>
+          <p className="text-xs italic text-slate-500 mt-3">
+            Uptime tracked while PoPManager is running
+          </p>
         </div>
       )}
 
@@ -386,7 +390,10 @@ export default function MinerDetail() {
       {/* Estimated Earnings */}
       <div className="bg-dark-800 rounded-xl border border-slate-700/50 p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+            {getCoinIcon(coinId) && (
+              <img src={getCoinIcon(coinId)!} alt={coinId} className="w-4 h-4 rounded-full" />
+            )}
             Estimated Earnings
           </h3>
           <div className="flex items-center gap-2">

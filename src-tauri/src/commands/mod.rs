@@ -1,4 +1,5 @@
 pub mod alerts;
+pub mod antminer;
 pub mod coins;
 pub mod email;
 pub mod export;
@@ -11,4 +12,6 @@ pub mod preferences;
 pub mod profitability;
 pub mod scan;
 pub mod storage;
+pub mod tray;
 pub mod uptime;
+pub mod whatsminer;

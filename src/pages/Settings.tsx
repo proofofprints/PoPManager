@@ -28,6 +28,7 @@ export default function Settings() {
   const [prefsFee, setPrefsFee] = useState(1.0);
   const [prefsElectricityCost, setPrefsElectricityCost] = useState(0.10);
   const [prefsMinerWattage, setPrefsMinerWattage] = useState(100.0);
+  const [prefsMinimizeToTray, setPrefsMinimizeToTray] = useState(true);
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsError, setPrefsError] = useState<string | null>(null);
   const [prefsSuccess, setPrefsSuccess] = useState<string | null>(null);
@@ -66,13 +67,14 @@ export default function Settings() {
       })
       .catch(() => setSmtpLoaded(true));
 
-    invoke<{ currency: string; poolFeePercent: number; electricityCostPerKwh: number; minerWattage: number; logLevel?: string }>("get_preferences")
+    invoke<{ currency: string; poolFeePercent: number; electricityCostPerKwh: number; minerWattage: number; logLevel?: string; minimizeToTray?: boolean }>("get_preferences")
       .then((p) => {
         setPrefsCurrency(p.currency);
         setPrefsFee(p.poolFeePercent);
         setPrefsElectricityCost(p.electricityCostPerKwh);
         setPrefsMinerWattage(p.minerWattage);
         if (p.logLevel) setLogLevel(p.logLevel);
+        if (p.minimizeToTray !== undefined) setPrefsMinimizeToTray(p.minimizeToTray);
       })
       .catch(console.error);
   }, []);
@@ -83,7 +85,7 @@ export default function Settings() {
     setPrefsError(null);
     setPrefsSuccess(null);
     try {
-      await invoke("save_preferences", { prefs: { currency: prefsCurrency, poolFeePercent: prefsFee, electricityCostPerKwh: prefsElectricityCost, minerWattage: prefsMinerWattage, logLevel } });
+      await invoke("save_preferences", { prefs: { currency: prefsCurrency, poolFeePercent: prefsFee, electricityCostPerKwh: prefsElectricityCost, minerWattage: prefsMinerWattage, logLevel, minimizeToTray: prefsMinimizeToTray } });
       setPrefsSuccess("Preferences saved.");
       refreshPrefs();
     } catch (err) {
@@ -176,7 +178,7 @@ export default function Settings() {
     setLogLevelMsg(null);
     try {
       await invoke("set_log_level", { level });
-      await invoke("save_preferences", { prefs: { currency: prefsCurrency, poolFeePercent: prefsFee, electricityCostPerKwh: prefsElectricityCost, minerWattage: prefsMinerWattage, logLevel: level } });
+      await invoke("save_preferences", { prefs: { currency: prefsCurrency, poolFeePercent: prefsFee, electricityCostPerKwh: prefsElectricityCost, minerWattage: prefsMinerWattage, logLevel: level, minimizeToTray: prefsMinimizeToTray } });
       setLogLevelMsg("Log level updated.");
     } catch (err) {
       setLogLevelMsg(`Error: ${err}`);
@@ -298,6 +300,15 @@ export default function Settings() {
                 <span className="text-sm text-slate-400">W per miner</span>
               </div>
             </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={prefsMinimizeToTray}
+                onChange={(e) => setPrefsMinimizeToTray(e.target.checked)}
+                className="rounded border-slate-600 bg-dark-900 text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-sm text-slate-300">Minimize to tray on close</span>
+            </label>
             {prefsError && <p className="text-red-400 text-xs">{prefsError}</p>}
             {prefsSuccess && <p className="text-emerald-400 text-xs">{prefsSuccess}</p>}
             <button

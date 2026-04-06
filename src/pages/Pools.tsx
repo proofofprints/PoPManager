@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import type { PoolProfile, SavedMiner, MinerInfo, CoinConfig } from "../types/miner";
+import { getCoinIcon } from "../utils/coinIcon";
 
 const EMPTY_FORM = {
   name: "",
@@ -391,11 +392,16 @@ export default function Pools() {
               {selectedProfile.fee_percent != null && (
                 <p className="text-slate-400 mt-1 text-sm">Fee: {selectedProfile.fee_percent}%</p>
               )}
-              {selectedProfile.coin_id && (
-                <p className="text-slate-400 text-sm">
-                  Coin: {coins.find(c => c.id === selectedProfile.coin_id)?.name ?? selectedProfile.coin_id}
-                </p>
-              )}
+              {selectedProfile.coin_id && (() => {
+                const coin = coins.find(c => c.id === selectedProfile.coin_id);
+                const icon = getCoinIcon(selectedProfile.coin_id);
+                return (
+                  <p className="text-slate-400 text-sm flex items-center gap-1.5">
+                    {icon && <img src={icon} alt={selectedProfile.coin_id} className="w-4 h-4 rounded-full" />}
+                    Coin: {coin?.name ?? selectedProfile.coin_id}
+                  </p>
+                );
+              })()}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -517,7 +523,14 @@ export default function Pools() {
                           <div className="text-xs text-slate-500 font-mono">{m.ip}</div>
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-300">{m.model || "—"}</td>
-                        <td className="px-4 py-3 text-sm text-slate-300 uppercase">{m.coinId || "—"}</td>
+                        <td className="px-4 py-3 text-sm text-slate-300">
+                          <div className="flex items-center gap-1.5">
+                            {getCoinIcon(m.coinId) && (
+                              <img src={getCoinIcon(m.coinId)!} alt={m.coinId} className="w-4 h-4 rounded-full flex-shrink-0" />
+                            )}
+                            <span className="uppercase">{m.coinId || "—"}</span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-right">
                           {m.online ? (
                             <span className="text-sm text-slate-200">
@@ -596,9 +609,14 @@ export default function Pools() {
                         <span className="text-sm text-slate-300">{p.fee_percent ?? 1}%</span>
                       </td>
                       <td className="px-5 py-4">
-                        <span className="text-sm text-slate-300">
-                          {coins.find(c => c.id === p.coin_id)?.ticker ?? (p.coin_id || "—")}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {p.coin_id && getCoinIcon(p.coin_id) && (
+                            <img src={getCoinIcon(p.coin_id)!} alt={p.coin_id} className="w-4 h-4 rounded-full flex-shrink-0" />
+                          )}
+                          <span className="text-sm text-slate-300">
+                            {coins.find(c => c.id === p.coin_id)?.ticker ?? (p.coin_id || "—")}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-5 py-4 text-right">
                         {loadingMiners ? (
