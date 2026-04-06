@@ -1,19 +1,25 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
+import { info } from "../utils/logger";
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { invoke } from "@tauri-apps/api/core";
-import type { MinerInfo, SavedMiner } from "../types/miner";
+import type { MinerInfo, SavedMiner, CoinEarnings, CoinConfig, FarmSnapshot, UptimeStats } from "../types/miner";
+import { getMinerCoinId } from "../utils/coinLookup";
+import { useAlerts } from "../context/AlertContext";
+import { useProfitability } from "../context/ProfitabilityContext";
+import type { MinerSnapshot } from "../types/alerts";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 
 const POLL_INTERVAL_MS = 45_000;
 
-/** Extract worker name from pool user string like "kaspa:addr.KS0_2" → "KS0_2" */
 function extractWorkerName(user: string): string | null {
   const dot = user.lastIndexOf(".");
   if (dot !== -1 && dot < user.length - 1) {
@@ -22,7 +28,6 @@ function extractWorkerName(user: string): string | null {
   return null;
 }
 
-/** Resolve display name using priority: custom label → worker name → hostname → IP */
 function resolveDisplayName(miner: MinerInfo, saved: SavedMiner | undefined): string {
   if (saved && saved.label && saved.label !== miner.ip) {
     return saved.label;
@@ -35,187 +40,78 @@ function resolveDisplayName(miner: MinerInfo, saved: SavedMiner | undefined): st
   return miner.hostname || miner.ip;
 }
 
-/** First word of model string as manufacturer (e.g. "Iceriver KS0" → "Iceriver") */
-function extractManufacturer(model: string): string {
-  return model.split(" ")[0] || model;
-}
-
-function HealthDot({ ok, label }: { ok: boolean; label: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span
-        className={`w-2 h-2 rounded-full ${ok ? "bg-emerald-400" : "bg-red-500"}`}
-      />
-      <span className={`text-xs ${ok ? "text-slate-400" : "text-red-400"}`}>
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function HashrateChart({ miner }: { miner: MinerInfo }) {
-  if (!miner.hashrateHistory.length) return null;
-  const history = miner.hashrateHistory[0];
-  const chartData = history.labels.map((label, i) => ({
-    label,
-    hashrate: history.values[i] ?? 0,
-  }));
-
-  return (
-    <div className="bg-dark-900 rounded-lg p-3 mt-3">
-      <p className="text-xs text-slate-400 mb-2">Hashrate History ({miner.hashrateUnit}H/s)</p>
-      <ResponsiveContainer width="100%" height={80}>
-        <LineChart data={chartData}>
-          <XAxis dataKey="label" hide />
-          <YAxis hide domain={["auto", "auto"]} />
-          <Tooltip
-            contentStyle={{ background: "#1e293b", border: "none", borderRadius: 6, fontSize: 11 }}
-            labelStyle={{ color: "#94a3b8" }}
-            formatter={(v: number) => [`${v} ${miner.hashrateUnit}H/s`, "Hashrate"]}
-          />
-          <Line
-            type="monotone"
-            dataKey="hashrate"
-            stroke="#6366f1"
-            strokeWidth={1.5}
-            dot={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-function MinerCard({
-  miner,
-  displayName,
-  onClick,
-}: {
-  miner: MinerInfo;
-  displayName: string;
-  onClick: () => void;
-}) {
-  const statusColor = {
-    online: "bg-emerald-500",
-    offline: "bg-red-500",
-    warning: "bg-amber-500",
-    unknown: "bg-slate-500",
-  }[miner.status] ?? "bg-slate-500";
-
-  const maxInTmp = miner.boards.length
-    ? Math.max(...miner.boards.map((b) => b.inTmp))
-    : null;
-  const maxOutTmp = miner.boards.length
-    ? Math.max(...miner.boards.map((b) => b.outTmp))
-    : null;
-  const activeFans = miner.fans.filter((f) => f > 0);
-  const activePool = miner.pools.find((p) => p.connect);
-
-  return (
-    <div
-      className="bg-dark-800 rounded-xl border border-slate-700/50 p-5 cursor-pointer hover:border-primary-500/50 hover:bg-dark-800/80 transition-all"
-      onClick={onClick}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h3 className="font-semibold text-white">{displayName}</h3>
-          <p className="text-sm text-slate-400">
-            {miner.ip} · {miner.model}
-          </p>
-          <p className="text-xs text-slate-500 mt-0.5">{miner.firmware}</p>
-        </div>
-        <span
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-white ${statusColor}`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
-          {miner.status}
-        </span>
-      </div>
-
-      {/* Stats grid */}
-      <div className="grid grid-cols-3 gap-3 mb-3">
-        <div className="bg-dark-900 rounded-lg p-3">
-          <p className="text-xs text-slate-400 mb-1">Hashrate</p>
-          <p className="text-lg font-bold text-white">{miner.rtHashrate}</p>
-          <p className="text-xs text-slate-500">{miner.hashrateUnit}H/s</p>
-        </div>
-        <div className="bg-dark-900 rounded-lg p-3">
-          <p className="text-xs text-slate-400 mb-1">Inlet / Outlet</p>
-          <p className="text-lg font-bold text-white">
-            {maxInTmp !== null ? `${maxInTmp}°` : "--"}
-            <span className="text-sm text-slate-400">
-              {maxOutTmp !== null ? ` / ${maxOutTmp}°` : ""}
-            </span>
-          </p>
-          <p className="text-xs text-slate-500">°C</p>
-        </div>
-        <div className="bg-dark-900 rounded-lg p-3">
-          <p className="text-xs text-slate-400 mb-1">Fans</p>
-          <p className="text-lg font-bold text-white">{activeFans[0] ?? "--"}</p>
-          <p className="text-xs text-slate-500">RPM</p>
-        </div>
-      </div>
-
-      {/* Pool info */}
-      {activePool && (
-        <div className="bg-dark-900 rounded-lg px-3 py-2 mb-3">
-          <p className="text-xs text-slate-400">Active Pool</p>
-          <p className="text-xs text-slate-300 truncate mt-0.5">{activePool.addr}</p>
-          <p className="text-xs text-slate-500">
-            Accepted: {activePool.accepted.toLocaleString()} · Diff: {activePool.diff}
-          </p>
-        </div>
-      )}
-
-      {/* Health indicators */}
-      <div className="flex gap-3 mb-2">
-        <HealthDot ok={miner.health.power} label="Power" />
-        <HealthDot ok={miner.health.network} label="Net" />
-        <HealthDot ok={miner.health.fan} label="Fan" />
-        <HealthDot ok={miner.health.temp} label="Temp" />
-      </div>
-
-      {/* Runtime */}
-      <p className="text-xs text-slate-500">Runtime: {miner.runtime}</p>
-
-      {/* Hashrate chart */}
-      <HashrateChart miner={miner} />
-    </div>
-  );
-}
+type CoinViewMode = "card" | "list";
 
 interface MinerWithSaved {
   info: MinerInfo;
   saved: SavedMiner | undefined;
 }
 
+interface CoinGroup {
+  coinId: string;
+  coin: CoinConfig | undefined;
+  count: number;
+  onlineCount: number;
+  offlineCount: number;
+  totalHashrate: number;
+  hashrateUnit: string;
+}
+
+type ProfitRange = 1 | 6 | 24 | 168 | 720;
+type ChartRange = 1 | 6 | 24 | 168 | 720;
+
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { checkAlerts } = useAlerts();
+  const { currency, poolFeePercent, electricityCostPerKwh, minerWattage, poolProfiles } = useProfitability();
+  const currencyCode = currency.toUpperCase();
   const [minerData, setMinerData] = useState<MinerWithSaved[]>([]);
   const [savedMiners, setSavedMiners] = useState<SavedMiner[]>([]);
+  const [coins, setCoins] = useState<CoinConfig[]>([]);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [coinEarnings, setCoinEarnings] = useState<Record<string, CoinEarnings>>({});
+  const [coinViewMode, setCoinViewMode] = useState<CoinViewMode>(() => {
+    const saved = localStorage.getItem("dashboard-coin-view");
+    return saved === "list" ? "list" : "card";
+  });
+  const [farmHistory, setFarmHistory] = useState<FarmSnapshot[]>([]);
+  const [chartRange, setChartRange] = useState<ChartRange>(24);
+  const [profitRange, setProfitRange] = useState<ProfitRange>(24);
+  const [fleetUptime, setFleetUptime] = useState<number | null>(null);
+  const pollCycleRef = useRef(0);
 
-  // Search & filter state
-  const [searchText, setSearchText] = useState("");
-  const [filterMfr, setFilterMfr] = useState("All");
-  const [filterModel, setFilterModel] = useState("All");
-  const [filterPool, setFilterPool] = useState("All");
+  function getPoolFeeForMiner(info: MinerInfo): number {
+    const activePool = info.pools.find((p) => p.connect || p.state === 1);
+    if (activePool && activePool.addr) {
+      for (const profile of poolProfiles) {
+        if (
+          profile.pool1addr === activePool.addr ||
+          profile.pool2addr === activePool.addr ||
+          profile.pool3addr === activePool.addr
+        ) {
+          return profile.fee_percent ?? poolFeePercent;
+        }
+      }
+    }
+    return poolFeePercent;
+  }
 
   const fetchAllStatuses = useCallback(async (saved: SavedMiner[]) => {
     if (saved.length === 0) return;
+    info(`Poll cycle start: ${saved.length} miner(s)`).catch(() => {});
     const results = await Promise.allSettled(
       saved.map((s) =>
-        invoke<MinerInfo>("get_miner_status", { ip: s.ip })
-          .then((info) => ({ info, saved: s }))
+        invoke<MinerInfo>("get_miner_status", { ip: s.ip }).then((info) => ({ info, saved: s }))
       )
     );
     const data: MinerWithSaved[] = results
-      .filter((r): r is PromiseFulfilledResult<MinerWithSaved> => r.status === "fulfilled")
+      .filter(
+        (r): r is PromiseFulfilledResult<{ info: MinerInfo; saved: SavedMiner }> =>
+          r.status === "fulfilled"
+      )
       .map((r) => r.value);
 
-    // For miners that failed (offline), create a minimal offline entry
     results.forEach((r, i) => {
       if (r.status === "rejected") {
         const s = saved[i];
@@ -240,17 +136,102 @@ export default function Dashboard() {
             hashrateHistory: [],
             health: { power: false, network: false, fan: false, temp: false },
             lastSeen: new Date().toISOString(),
+            defaultWattage: 100,
           },
           saved: s,
         });
       }
     });
 
+    const onlineCount = data.filter((d) => d.info.online).length;
+    info(`Poll cycle complete: ${onlineCount}/${data.length} online`).catch(() => {});
     setMinerData(data);
     setLastRefresh(new Date().toLocaleTimeString());
-  }, []);
 
-  // Load saved miners and fetch statuses on mount
+    // Record uptime for each miner
+    data.forEach(({ info }) => {
+      invoke("record_uptime", { ip: info.ip, online: info.status === "online" }).catch(console.error);
+    });
+
+    // Fetch fleet uptime stats
+    invoke<Record<string, UptimeStats>>("get_all_uptime_stats", { hours: 24 })
+      .then((stats) => {
+        const values = Object.values(stats);
+        if (values.length > 0) {
+          const avg = values.reduce((s, v) => s + v.uptime_percent, 0) / values.length;
+          setFleetUptime(avg);
+        }
+      })
+      .catch(console.error);
+
+    pollCycleRef.current += 1;
+    if (pollCycleRef.current % 5 === 1) {
+      const onlineData = data.filter((d) => d.info.online);
+      const totalHashrate = onlineData.reduce((s, d) => s + d.info.rtHashrate, 0);
+      const coinDataMap: Record<string, { hashrate: number; minerCount: number }> = {};
+      for (const { info, saved: s } of onlineData) {
+        const activePoolAddr = info.pools.find((p) => p.connect || p.state === 1)?.addr;
+        const cid = getMinerCoinId(activePoolAddr, poolProfiles, s?.coin_id);
+        if (!coinDataMap[cid]) coinDataMap[cid] = { hashrate: 0, minerCount: 0 };
+        coinDataMap[cid].hashrate += info.rtHashrate;
+        coinDataMap[cid].minerCount += 1;
+      }
+      const coinData: FarmSnapshot["coinData"] = {};
+      for (const [cid, d] of Object.entries(coinDataMap)) {
+        coinData[cid] = { hashrate: d.hashrate, minerCount: d.minerCount, dailyEarningsCoins: 0, dailyEarningsFiat: 0 };
+      }
+      const snapshot: FarmSnapshot = {
+        timestamp: Math.floor(Date.now() / 1000),
+        totalHashrate,
+        onlineCount: onlineData.length,
+        totalMiners: data.length,
+        coinData,
+      };
+      invoke("add_farm_snapshot", { snapshot }).catch(console.error);
+      invoke<FarmSnapshot[]>("get_farm_history", { hours: 720 })
+        .then(setFarmHistory)
+        .catch(console.error);
+    }
+
+    const snapshots: MinerSnapshot[] = data.map(({ info, saved: s }) => ({
+      ip: info.ip,
+      label: resolveDisplayName(info, s),
+      online: info.online,
+      rtHashrate: info.rtHashrate,
+      boards: info.boards.map((b) => ({ inTmp: b.inTmp, outTmp: b.outTmp })),
+    }));
+    checkAlerts(snapshots);
+  }, [checkAlerts, poolProfiles]);
+
+  const fetchCoinEarnings = useCallback((groups: CoinGroup[], allMinerData: MinerWithSaved[]) => {
+    groups.forEach(({ coinId, totalHashrate }) => {
+      if (totalHashrate <= 0) return;
+      const coinMiners = allMinerData.filter((d) => {
+        if (!d.info.online) return false;
+        const activePoolAddr = d.info.pools.find((p) => p.connect || p.state === 1)?.addr;
+        return getMinerCoinId(activePoolAddr, poolProfiles, d.saved?.coin_id) === coinId;
+      });
+      let weightedFee = poolFeePercent;
+      if (coinMiners.length > 0) {
+        const totalH = coinMiners.reduce((s, d) => s + d.info.rtHashrate, 0);
+        if (totalH > 0) {
+          weightedFee = coinMiners.reduce((s, d) => {
+            const fee = getPoolFeeForMiner(d.info);
+            return s + fee * (d.info.rtHashrate / totalH);
+          }, 0);
+        }
+      }
+      invoke<CoinEarnings>("calculate_coin_earnings", {
+        coinId,
+        hashrateGhs: totalHashrate,
+        poolFeePercent: weightedFee,
+        currency,
+      })
+        .then((est) => setCoinEarnings((prev) => ({ ...prev, [coinId]: est })))
+        .catch(console.error);
+    });
+  }, [poolFeePercent, currency, poolProfiles]);
+
   useEffect(() => {
     invoke<SavedMiner[]>("get_saved_miners")
       .then((saved) => {
@@ -258,9 +239,12 @@ export default function Dashboard() {
         fetchAllStatuses(saved);
       })
       .catch(console.error);
+    invoke<CoinConfig[]>("get_coins").then(setCoins).catch(console.error);
+    invoke<FarmSnapshot[]>("get_farm_history", { hours: 720 })
+      .then(setFarmHistory)
+      .catch(console.error);
   }, [fetchAllStatuses]);
 
-  // Auto-refresh every 45 seconds
   useEffect(() => {
     if (savedMiners.length === 0) return;
     const id = setInterval(() => fetchAllStatuses(savedMiners), POLL_INTERVAL_MS);
@@ -277,61 +261,115 @@ export default function Dashboard() {
   }
 
   const miners = minerData.map((d) => d.info);
+  const onlineMiners = minerData.filter((d) => d.info.online);
   const totalRtHashrate = miners.reduce((s, m) => s + m.rtHashrate, 0);
   const onlineCount = miners.filter((m) => m.online).length;
   const unit = miners.find((m) => m.online)?.hashrateUnit ?? "G";
-  const allBoards = miners.flatMap((m) => m.boards);
-  const avgInTemp =
-    allBoards.length > 0
-      ? (allBoards.reduce((s, b) => s + b.inTmp, 0) / allBoards.length).toFixed(1)
-      : "--";
+  const totalFarmWattage = useMemo(() => {
+    return onlineMiners.reduce((sum, { saved }) => sum + (saved?.wattage ?? minerWattage), 0);
+  }, [onlineMiners, minerWattage]);
 
-  // Unique filter options derived from actual miner data
-  const uniqueManufacturers = useMemo(() => {
-    const s = new Set(miners.map((m) => extractManufacturer(m.model)));
-    return ["All", ...Array.from(s).sort()];
-  }, [miners]);
+  const coinGroups = useMemo<CoinGroup[]>(() => {
+    const byCoin = new Map<string, MinerWithSaved[]>();
+    for (const saved of savedMiners) {
+      const live = minerData.find((d) => d.info.ip === saved.ip);
+      const activePoolAddr = live?.info.pools.find((p) => p.connect || p.state === 1)?.addr;
+      const coinId = getMinerCoinId(activePoolAddr, poolProfiles, saved.coin_id);
+      if (!byCoin.has(coinId)) byCoin.set(coinId, []);
+      byCoin.get(coinId)!.push(
+        live ?? {
+          info: {
+            ip: saved.ip,
+            hostname: saved.label,
+            mac: "",
+            model: "Unknown",
+            status: "offline",
+            firmware: "",
+            software: "",
+            online: false,
+            rtHashrate: 0,
+            avgHashrate: 0,
+            hashrateUnit: "G",
+            runtime: "--",
+            runtimeSecs: 0,
+            fans: [],
+            boards: [],
+            pools: [],
+            hashrateHistory: [],
+            health: { power: false, network: false, fan: false, temp: false },
+            lastSeen: new Date().toISOString(),
+            defaultWattage: 100,
+          },
+          saved,
+        }
+      );
+    }
 
-  const uniqueModels = useMemo(() => {
-    const s = new Set(miners.map((m) => m.model));
-    return ["All", ...Array.from(s).sort()];
-  }, [miners]);
-
-  const uniquePools = useMemo(() => {
-    const s = new Set(
-      miners.flatMap((m) => m.pools.filter((p) => p.addr).map((p) => p.addr))
-    );
-    return ["All", ...Array.from(s).sort()];
-  }, [miners]);
-
-  // Filtered miner list
-  const filteredData = useMemo(() => {
-    const q = searchText.toLowerCase();
-    return minerData.filter(({ info, saved }) => {
-      // Search filter
-      if (q) {
-        const displayName = resolveDisplayName(info, saved).toLowerCase();
-        const poolUser = info.pools.find((p) => p.connect)?.user ?? "";
-        const worker = extractWorkerName(poolUser)?.toLowerCase() ?? "";
-        const matches =
-          displayName.includes(q) ||
-          info.ip.includes(q) ||
-          info.hostname.toLowerCase().includes(q) ||
-          worker.includes(q);
-        if (!matches) return false;
-      }
-      // Manufacturer filter
-      if (filterMfr !== "All" && extractManufacturer(info.model) !== filterMfr) return false;
-      // Model filter
-      if (filterModel !== "All" && info.model !== filterModel) return false;
-      // Pool filter
-      if (filterPool !== "All") {
-        const hasPool = info.pools.some((p) => p.addr === filterPool);
-        if (!hasPool) return false;
-      }
-      return true;
+    return Array.from(byCoin.entries()).map(([coinId, group]) => {
+      const coin = coins.find((c) => c.id === coinId);
+      const onlineMinersList = group.filter((g) => g.info.online);
+      const totalHashrate = group.reduce((s, g) => s + g.info.rtHashrate, 0);
+      const hashrateUnit = onlineMinersList[0]?.info.hashrateUnit ?? "G";
+      return {
+        coinId,
+        coin,
+        count: group.length,
+        onlineCount: onlineMinersList.length,
+        offlineCount: group.length - onlineMinersList.length,
+        totalHashrate,
+        hashrateUnit,
+      };
     });
-  }, [minerData, searchText, filterMfr, filterModel, filterPool]);
+  }, [savedMiners, minerData, coins, poolProfiles]);
+
+  useEffect(() => {
+    setCoinEarnings({});
+  }, [currency]);
+
+  useEffect(() => {
+    fetchCoinEarnings(coinGroups, minerData);
+  }, [totalRtHashrate, coinGroups, minerData, fetchCoinEarnings]);
+
+  function handleCoinViewChange(mode: CoinViewMode) {
+    setCoinViewMode(mode);
+    localStorage.setItem("dashboard-coin-view", mode);
+  }
+
+  const farmTotals = useMemo(() => {
+    const dailyGross = Object.values(coinEarnings).reduce((s, e) => s + e.dailyFiat, 0);
+    const dailyPowerKwh = totalFarmWattage / 1000 * 24;
+    const dailyPowerCost = dailyPowerKwh * electricityCostPerKwh;
+    const dailyNet = dailyGross - dailyPowerCost;
+    return {
+      dailyGross,
+      monthlyGross: dailyGross * 30,
+      dailyPowerCost,
+      monthlyPowerCost: dailyPowerCost * 30,
+      dailyNet,
+      monthlyNet: dailyNet * 30,
+      dailyPowerKwh,
+    };
+  }, [coinEarnings, totalFarmWattage, electricityCostPerKwh]);
+
+  const profitRangeLabel = (r: ProfitRange) => {
+    if (r === 168) return "7d";
+    if (r === 720) return "30d";
+    return `${r}h`;
+  };
+
+  const hasEarnings = Object.keys(coinEarnings).length > 0;
+
+  async function handleExportProfitability() {
+    try {
+      const filePath = await save({ filters: [{ name: "CSV", extensions: ["csv"] }] });
+      if (filePath) {
+        const csv = await invoke<string>("export_profitability_csv", { currency });
+        await writeTextFile(filePath, csv);
+      }
+    } catch (err) {
+      console.error("Export failed:", err);
+    }
+  }
 
   return (
     <div className="p-8">
@@ -339,7 +377,7 @@ export default function Dashboard() {
       <div className="mb-6 flex items-end justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white">Dashboard</h2>
-          <p className="text-slate-400 mt-1">Monitor all your ASIC miners at a glance</p>
+          <p className="text-slate-400 mt-1">Farm overview at a glance</p>
         </div>
         <div className="flex items-center gap-3">
           {lastRefresh && (
@@ -374,7 +412,7 @@ export default function Dashboard() {
           { label: "Total Miners", value: miners.length, unit: "" },
           { label: "Online", value: onlineCount, unit: "" },
           { label: "Total Hashrate", value: totalRtHashrate.toFixed(1), unit: `${unit}H/s` },
-          { label: "Avg Temp", value: avgInTemp, unit: avgInTemp !== "--" ? "°C" : "" },
+          { label: "Fleet Uptime (24h)", value: fleetUptime !== null ? fleetUptime.toFixed(1) : "--", unit: fleetUptime !== null ? "%" : "" },
         ].map((stat) => (
           <div key={stat.label} className="bg-dark-800 rounded-xl border border-slate-700/50 p-5">
             <p className="text-sm text-slate-400">{stat.label}</p>
@@ -388,74 +426,163 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Search & Filters */}
-      {minerData.length > 0 && (
-        <div className="mb-6 space-y-3">
-          {/* Search bar */}
-          <div className="relative">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              type="text"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              placeholder="Search by name, IP, hostname, or worker..."
-              className="w-full bg-dark-800 border border-slate-700/50 rounded-xl pl-10 pr-4 py-2.5 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-primary-500/70"
-            />
+      {/* Profitability summary */}
+      <div className="mb-6 bg-dark-800 rounded-xl border border-slate-700/50 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+              Farm Profitability
+            </h3>
+            <span className="text-xs italic text-slate-500">Estimated</span>
           </div>
-
-          {/* Filter dropdowns */}
-          <div className="flex gap-3 flex-wrap">
-            {[
-              { label: "Manufacturer", value: filterMfr, options: uniqueManufacturers, set: setFilterMfr },
-              { label: "Model", value: filterModel, options: uniqueModels, set: setFilterModel },
-              { label: "Pool", value: filterPool, options: uniquePools, set: setFilterPool },
-            ].map((f) => (
-              <div key={f.label} className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">{f.label}:</span>
-                <select
-                  value={f.value}
-                  onChange={(e) => f.set(e.target.value)}
-                  className="bg-dark-800 border border-slate-700/50 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-primary-500/70 cursor-pointer"
-                >
-                  {f.options.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
-            {(searchText || filterMfr !== "All" || filterModel !== "All" || filterPool !== "All") && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportProfitability}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-900 border border-slate-700/50 hover:border-primary-500/50 text-slate-300 text-xs font-medium rounded-lg transition-colors"
+            >
+              Export CSV
+            </button>
+          <div className="flex items-center gap-1">
+            {([1, 6, 24, 168, 720] as ProfitRange[]).map((r) => (
               <button
-                onClick={() => {
-                  setSearchText("");
-                  setFilterMfr("All");
-                  setFilterModel("All");
-                  setFilterPool("All");
-                }}
-                className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                key={r}
+                onClick={() => setProfitRange(r)}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                  profitRange === r
+                    ? "bg-primary-600 text-white"
+                    : "text-slate-400 hover:text-white bg-dark-900"
+                }`}
               >
-                Clear filters
+                {profitRangeLabel(r)}
               </button>
-            )}
+            ))}
+          </div>
           </div>
         </div>
-      )}
+        {hasEarnings ? (
+          <div className="grid grid-cols-3 gap-4">
+            {/* Gross Earnings */}
+            <div className="bg-dark-900 rounded-lg p-4">
+              <p className="text-xs text-slate-400 mb-1">Gross Earnings</p>
+              <p className="text-2xl font-bold text-emerald-400">
+                {farmTotals.dailyGross.toFixed(2)}
+                <span className="text-sm text-slate-400 ml-1">{currencyCode}/day</span>
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Monthly: {farmTotals.monthlyGross.toFixed(2)} {currencyCode}
+              </p>
+            </div>
+            {/* Power Cost */}
+            <div className="bg-dark-900 rounded-lg p-4">
+              <p className="text-xs text-slate-400 mb-1">Power Cost</p>
+              <p className="text-2xl font-bold text-amber-400">
+                {farmTotals.dailyPowerCost.toFixed(2)}
+                <span className="text-sm text-slate-400 ml-1">{currencyCode}/day</span>
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Monthly: {farmTotals.monthlyPowerCost.toFixed(2)} {currencyCode}
+              </p>
+              <p className="text-xs text-slate-600 mt-0.5">{farmTotals.dailyPowerKwh.toFixed(1)} kWh/day</p>
+            </div>
+            {/* Net Profit */}
+            <div className="bg-dark-900 rounded-lg p-4">
+              <p className="text-xs text-slate-400 mb-1">Net Profit</p>
+              <p className={`text-2xl font-bold ${farmTotals.dailyNet >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {farmTotals.dailyNet.toFixed(2)}
+                <span className="text-sm text-slate-400 ml-1">{currencyCode}/day</span>
+              </p>
+              <p className={`text-xs mt-1 ${farmTotals.monthlyNet >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                Monthly: {farmTotals.monthlyNet.toFixed(2)} {currencyCode}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">
+            {totalRtHashrate > 0 ? "Fetching profitability data..." : "No miners online"}
+          </p>
+        )}
+      </div>
 
-      {/* Miner cards */}
-      {minerData.length === 0 ? (
+      {/* Farm Hashrate Chart */}
+      {farmHistory.length > 1 && (() => {
+        const cutoffSecs = Math.floor(Date.now() / 1000) - chartRange * 3600;
+        const filtered = farmHistory.filter((s) => s.timestamp > cutoffSecs);
+        const chartData = filtered.map((s) => ({
+          time: new Date(s.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          hashrate: parseFloat(s.totalHashrate.toFixed(2)),
+        }));
+        return (
+          <div className="mb-6 bg-dark-800 rounded-xl border border-slate-700/50 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+                Total Farm Hashrate
+              </h3>
+              <div className="flex items-center gap-1">
+                {([1, 6, 24, 168, 720] as ChartRange[]).map((h) => (
+                  <button
+                    key={h}
+                    onClick={() => setChartRange(h)}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      chartRange === h
+                        ? "bg-primary-600 text-white"
+                        : "text-slate-400 hover:text-white bg-dark-900"
+                    }`}
+                  >
+                    {h === 168 ? "7d" : h === 720 ? "30d" : `${h}h`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={160}>
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="hashGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis
+                  dataKey="time"
+                  tick={{ fill: "#64748b", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tick={{ fill: "#64748b", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  domain={["auto", "auto"]}
+                  width={45}
+                  tickFormatter={(v: number) => `${v}`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "#0f172a",
+                    border: "1px solid rgba(148,163,184,0.15)",
+                    borderRadius: 8,
+                    fontSize: 12,
+                  }}
+                  labelStyle={{ color: "#94a3b8" }}
+                  formatter={(v: number) => [`${v} GH/s`, "Hashrate"]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="hashrate"
+                  stroke="#6366f1"
+                  strokeWidth={2}
+                  fill="url(#hashGrad)"
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      })()}
+
+      {/* Mining by Coin section */}
+      {savedMiners.length === 0 ? (
         <div className="text-center py-20 text-slate-500">
           <svg
             className="w-12 h-12 mx-auto mb-4 opacity-50"
@@ -471,34 +598,241 @@ export default function Dashboard() {
             />
           </svg>
           <p className="text-lg font-medium">No miners found</p>
-          <p className="text-sm mt-1">Go to Miners to add or scan for miners</p>
-        </div>
-      ) : filteredData.length === 0 ? (
-        <div className="text-center py-16 text-slate-500">
-          <p className="text-lg font-medium">No miners match your filters</p>
-          <button
-            onClick={() => {
-              setSearchText("");
-              setFilterMfr("All");
-              setFilterModel("All");
-              setFilterPool("All");
-            }}
-            className="text-sm mt-2 text-primary-400 hover:text-primary-300"
-          >
-            Clear filters
-          </button>
+          <p className="text-sm mt-1">Go to Monitoring to add miners</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredData.map((d) => (
-            <MinerCard
-              key={d.info.ip}
-              miner={d.info}
-              displayName={resolveDisplayName(d.info, d.saved)}
-              onClick={() => navigate(`/miner/${encodeURIComponent(d.info.ip)}`)}
-            />
-          ))}
-        </div>
+        <>
+          {/* Section header + view toggle */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+              Mining by Coin
+            </h3>
+            <div className="flex items-center bg-dark-800 border border-slate-700/50 rounded-lg p-0.5">
+              <button
+                onClick={() => handleCoinViewChange("card")}
+                title="Card view"
+                className={`p-2 rounded-md transition-colors ${
+                  coinViewMode === "card"
+                    ? "bg-primary-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                  />
+                </svg>
+              </button>
+              <button
+                onClick={() => handleCoinViewChange("list")}
+                title="List view"
+                className={`p-2 rounded-md transition-colors ${
+                  coinViewMode === "list"
+                    ? "bg-primary-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Card view */}
+          {coinViewMode === "card" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {coinGroups.map(
+                ({ coinId, coin, count, onlineCount, offlineCount, totalHashrate, hashrateUnit }) => {
+                  const color = coin?.color ?? "#6366f1";
+                  const displayName = coin ? `${coin.name} (${coin.ticker})` : coinId;
+                  const earnings = coinEarnings[coinId];
+                  const ticker = coin?.ticker ?? coinId.toUpperCase();
+                  const coinDecimals = ticker === "BTC" ? 6 : 2;
+                  return (
+                    <div
+                      key={coinId}
+                      onClick={() => navigate(`/miners?coin=${encodeURIComponent(coinId)}`)}
+                      className="bg-dark-800 rounded-xl border border-slate-700/50 p-5 cursor-pointer hover:border-primary-500/50 transition-all"
+                      style={{ borderLeftWidth: 3, borderLeftColor: color }}
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h4 className="font-semibold text-white">{displayName}</h4>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {count} miner{count !== 1 ? "s" : ""}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span
+                            className="text-xs font-bold px-2 py-0.5 rounded-full"
+                            style={{ backgroundColor: `${color}20`, color }}
+                          >
+                            {ticker}
+                          </span>
+                          {earnings && (
+                            <p className="text-xs text-slate-500 mt-1">
+                              {earnings.coinPrice.toFixed(4)} {currencyCode}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-dark-900 rounded-lg p-3">
+                          <p className="text-xs text-slate-400 mb-1">Online</p>
+                          <p className="text-xl font-bold text-emerald-400">{onlineCount}</p>
+                        </div>
+                        <div className="bg-dark-900 rounded-lg p-3">
+                          <p className="text-xs text-slate-400 mb-1">Offline</p>
+                          <p
+                            className={`text-xl font-bold ${
+                              offlineCount > 0 ? "text-red-400" : "text-slate-500"
+                            }`}
+                          >
+                            {offlineCount}
+                          </p>
+                        </div>
+                        <div className="bg-dark-900 rounded-lg p-3">
+                          <p className="text-xs text-slate-400 mb-1">Hashrate</p>
+                          <p className="text-xl font-bold text-white">
+                            {totalHashrate.toFixed(1)}
+                          </p>
+                          <p className="text-xs text-slate-500">{hashrateUnit}H/s</p>
+                        </div>
+                      </div>
+                      {earnings && (
+                        <div className="mt-3 pt-3 border-t border-slate-700/30 grid grid-cols-2 gap-2">
+                          <div>
+                            <p className="text-xs text-slate-400">Daily</p>
+                            <p className="text-sm font-semibold text-emerald-400">
+                              {earnings.dailyCoins.toFixed(coinDecimals)} {ticker}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {earnings.dailyFiat.toFixed(2)} {currencyCode}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400">Monthly</p>
+                            <p className="text-sm font-semibold text-emerald-400">
+                              {earnings.monthlyCoins.toFixed(coinDecimals)} {ticker}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {earnings.monthlyFiat.toFixed(2)} {currencyCode}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+              )}
+            </div>
+          ) : (
+            /* List view */
+            <div className="bg-dark-800 rounded-xl border border-slate-700/50 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="border-b border-slate-700/50">
+                  <tr className="text-slate-400">
+                    <th className="text-left px-5 py-3">Coin</th>
+                    <th className="text-right px-5 py-3">Price</th>
+                    <th className="text-right px-5 py-3">Miners</th>
+                    <th className="text-right px-5 py-3">Online</th>
+                    <th className="text-right px-5 py-3">Offline</th>
+                    <th className="text-right px-5 py-3">Hashrate</th>
+                    <th className="text-right px-5 py-3">Daily</th>
+                    <th className="text-right px-5 py-3">Monthly</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700/30">
+                  {coinGroups.map(
+                    ({
+                      coinId,
+                      coin,
+                      count,
+                      onlineCount,
+                      offlineCount,
+                      totalHashrate,
+                      hashrateUnit,
+                    }) => {
+                      const color = coin?.color ?? "#6366f1";
+                      const displayName = coin ? `${coin.name} (${coin.ticker})` : coinId;
+                      const earnings = coinEarnings[coinId];
+                      const ticker = coin?.ticker ?? coinId.toUpperCase();
+                      const coinDecimals = ticker === "BTC" ? 6 : 2;
+                      return (
+                        <tr
+                          key={coinId}
+                          onClick={() => navigate(`/miners?coin=${encodeURIComponent(coinId)}`)}
+                          className="hover:bg-slate-800/50 cursor-pointer transition-colors"
+                        >
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: color }}
+                              />
+                              <span className="text-white font-medium">{displayName}</span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3 text-right text-slate-400 text-xs">
+                            {earnings ? `${earnings.coinPrice.toFixed(4)} ${currencyCode}` : "—"}
+                          </td>
+                          <td className="px-5 py-3 text-right text-slate-300">{count}</td>
+                          <td className="px-5 py-3 text-right text-emerald-400">{onlineCount}</td>
+                          <td className="px-5 py-3 text-right">
+                            <span className={offlineCount > 0 ? "text-red-400" : "text-slate-500"}>
+                              {offlineCount}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-right text-white">
+                            {totalHashrate.toFixed(1)}{" "}
+                            <span className="text-xs text-slate-500">{hashrateUnit}H/s</span>
+                          </td>
+                          <td className="px-5 py-3 text-right">
+                            {earnings ? (
+                              <div>
+                                <p className="text-sm font-semibold text-emerald-400">
+                                  {earnings.dailyCoins.toFixed(coinDecimals)} {ticker}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {earnings.dailyFiat.toFixed(2)} {currencyCode}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="text-slate-600">—</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 text-right">
+                            {earnings ? (
+                              <div>
+                                <p className="text-sm font-semibold text-emerald-400">
+                                  {earnings.monthlyCoins.toFixed(coinDecimals)} {ticker}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {earnings.monthlyFiat.toFixed(2)} {currencyCode}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="text-slate-600">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    }
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

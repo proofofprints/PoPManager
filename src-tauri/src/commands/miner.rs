@@ -179,6 +179,7 @@ pub struct MinerInfo {
     pub hashrate_history: Vec<HashrateHistory>,
     pub health: HealthState,
     pub last_seen: String,
+    pub default_wattage: f64,
 }
 
 // ---- Helpers ----
@@ -205,20 +206,80 @@ fn parse_runtime(s: &str) -> u64 {
     }
 }
 
-/// Detect model from softver string
-fn detect_model(softver: &str, api_model: &str) -> String {
+/// Detect model and default wattage from softver and api_model strings
+fn detect_model_and_wattage(softver: &str, api_model: &str) -> (String, f64) {
     let sv = softver.to_lowercase();
-    if sv.contains("ks0ultra") {
-        "Iceriver KS0 Ultra".to_string()
-    } else if sv.contains("ks0pro") {
-        "Iceriver KS0 Pro".to_string()
+    let am = api_model.to_lowercase();
+
+    // Check softver first
+    let wattage_from_softver = if sv.contains("ks0ultra") || sv.contains("ks0 ultra") {
+        Some(("Iceriver KS0 Ultra".to_string(), 100.0_f64))
+    } else if sv.contains("ks0pro") || sv.contains("ks0 pro") {
+        Some(("Iceriver KS0 Pro".to_string(), 100.0_f64))
     } else if sv.contains("ks0") {
-        "Iceriver KS0".to_string()
-    } else if !api_model.is_empty() && api_model != "none" {
-        api_model.to_string()
+        Some(("Iceriver KS0".to_string(), 65.0_f64))
+    } else if sv.contains("ks3") {
+        Some(("Iceriver KS3".to_string(), 3200.0_f64))
+    } else if sv.contains("ks2") {
+        Some(("Iceriver KS2".to_string(), 1200.0_f64))
+    } else if sv.contains("ks1") {
+        Some(("Iceriver KS1".to_string(), 600.0_f64))
     } else {
-        "Iceriver".to_string()
+        None
+    };
+
+    if let Some(result) = wattage_from_softver {
+        return result;
     }
+
+    // Check softver for Bitcoin Antminer / Whatsminer patterns
+    let wattage_from_bitcoin = if sv.contains("s21") && (sv.contains("pro") || sv.contains("hyd")) {
+        Some(("Antminer S21 Pro".to_string(), 3510.0_f64))
+    } else if sv.contains("s21") {
+        Some(("Antminer S21".to_string(), 3500.0_f64))
+    } else if sv.contains("s19") && sv.contains("xp") {
+        Some(("Antminer S19 XP".to_string(), 3010.0_f64))
+    } else if sv.contains("s19") && sv.contains("pro") {
+        Some(("Antminer S19 Pro".to_string(), 3250.0_f64))
+    } else if sv.contains("s19") {
+        Some(("Antminer S19".to_string(), 3250.0_f64))
+    } else if sv.contains("m66") {
+        Some(("Whatsminer M66".to_string(), 5500.0_f64))
+    } else if sv.contains("m60") {
+        Some(("Whatsminer M60".to_string(), 3420.0_f64))
+    } else if sv.contains("m56") {
+        Some(("Whatsminer M56".to_string(), 5550.0_f64))
+    } else if sv.contains("m50") {
+        Some(("Whatsminer M50".to_string(), 3276.0_f64))
+    } else {
+        None
+    };
+
+    if let Some(result) = wattage_from_bitcoin {
+        return result;
+    }
+
+    // Fall back to api_model
+    if !api_model.is_empty() && api_model != "none" {
+        let wattage = if am.contains("s21") && (am.contains("pro") || am.contains("hyd")) { 3510.0 }
+            else if am.contains("s21") { 3500.0 }
+            else if am.contains("s19") && am.contains("xp") { 3010.0 }
+            else if am.contains("s19") && am.contains("pro") { 3250.0 }
+            else if am.contains("s19") { 3250.0 }
+            else if am.contains("m66") { 5500.0 }
+            else if am.contains("m60") { 3420.0 }
+            else if am.contains("m56") { 5550.0 }
+            else if am.contains("m50") { 3276.0 }
+            else if am.contains("ks3") { 3200.0 }
+            else if am.contains("ks2") { 1200.0 }
+            else if am.contains("ks1") { 600.0 }
+            else if am.contains("ks0pro") || am.contains("ks0 pro") { 100.0 }
+            else if am.contains("ks0") { 65.0 }
+            else { 100.0 };
+        return (api_model.to_string(), wattage);
+    }
+
+    ("Iceriver".to_string(), 100.0)
 }
 
 /// Fetch live status from an Iceriver miner at the given IP.
@@ -234,14 +295,21 @@ pub async fn fetch_miner_info(ip: String) -> Result<MinerInfo, String> {
         .get(&url)
         .send()
         .await
-        .map_err(|e| format!("Connection failed to {ip}: {e}"))?;
+        .map_err(|e| {
+            log::warn!("Connection failed to {}: {}", ip, e);
+            format!("Connection failed to {ip}: {e}")
+        })?;
 
     let panel: IceriverResponse = resp
         .json()
         .await
-        .map_err(|e| format!("Failed to parse response from {ip}: {e}"))?;
+        .map_err(|e| {
+            log::warn!("Failed to parse response from {}: {}", ip, e);
+            format!("Failed to parse response from {ip}: {e}")
+        })?;
 
     if panel.error != 0 {
+        log::error!("Miner API error {} from {}: {}", panel.error, ip, panel.message);
         return Err(format!("Miner API error {}: {}", panel.error, panel.message));
     }
 
@@ -250,7 +318,7 @@ pub async fn fetch_miner_info(ip: String) -> Result<MinerInfo, String> {
     let rt_hashrate = parse_hashrate(&d.rtpow);
     let avg_hashrate = parse_hashrate(&d.avgpow);
     let runtime_secs = parse_runtime(&d.runtime);
-    let model = detect_model(&d.softver1, &d.model);
+    let (model, default_wattage) = detect_model_and_wattage(&d.softver1, &d.model);
 
     let boards = d
         .boards
@@ -299,6 +367,8 @@ pub async fn fetch_miner_info(ip: String) -> Result<MinerInfo, String> {
     let status = if d.online { "online" } else { "offline" }.to_string();
     let now = chrono::Utc::now().to_rfc3339();
 
+    log::info!("Fetched miner {} — model={} rt={:.1}{} avg={:.1}{}", ip, model, rt_hashrate, d.unit, avg_hashrate, d.unit);
+
     Ok(MinerInfo {
         ip: d.ip.clone(),
         hostname: d.host,
@@ -324,6 +394,7 @@ pub async fn fetch_miner_info(ip: String) -> Result<MinerInfo, String> {
             temp: d.tempstate,
         },
         last_seen: now,
+        default_wattage,
     })
 }
 

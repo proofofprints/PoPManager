@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   AreaChart,
@@ -10,7 +10,11 @@ import {
   Legend,
 } from "recharts";
 import { invoke } from "@tauri-apps/api/core";
-import type { MinerInfo } from "../types/miner";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+import type { MinerInfo, CoinEarnings, PoolProfile, SavedMiner, UptimeStats, CoinConfig } from "../types/miner";
+import { profileToPayload } from "../types/miner";
+import { useProfitability } from "../context/ProfitabilityContext";
+import { getMinerCoinId } from "../utils/coinLookup";
 
 const POLL_INTERVAL_MS = 45_000;
 
@@ -110,11 +114,33 @@ function HashrateDetailChart({ miner }: { miner: MinerInfo }) {
 export default function MinerDetail() {
   const { ip } = useParams<{ ip: string }>();
   const navigate = useNavigate();
+  const { currency, poolFeePercent: defaultFeePercent, electricityCostPerKwh, minerWattage } = useProfitability();
+  const currencyCode = currency.toUpperCase();
   const [miner, setMiner] = useState<MinerInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
+  const [earnings, setEarnings] = useState<CoinEarnings | null>(null);
+  const [savedCoinId, setSavedCoinId] = useState<string>("kaspa");
+  const [coins, setCoins] = useState<CoinConfig[]>([]);
+  const [poolFeePercent, setPoolFeePercent] = useState(defaultFeePercent);
+  const [poolProfiles, setPoolProfiles] = useState<PoolProfile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [applyingPool, setApplyingPool] = useState(false);
+  const [applyStatus, setApplyStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [thisWattage, setThisWattage] = useState<number>(minerWattage);
+  const [wattageEditing, setWattageEditing] = useState(false);
+  const [wattageInput, setWattageInput] = useState<string>("");
+  const [uptime24h, setUptime24h] = useState<UptimeStats | null>(null);
+  const [uptime7d, setUptime7d] = useState<UptimeStats | null>(null);
+  const [uptime30d, setUptime30d] = useState<UptimeStats | null>(null);
 
   const decodedIp = ip ? decodeURIComponent(ip) : "";
+
+  const coinId = useMemo(() => {
+    if (!miner) return savedCoinId;
+    const activePoolAddr = miner.pools.find((p) => p.connect || p.state === 1)?.addr;
+    return getMinerCoinId(activePoolAddr, poolProfiles, savedCoinId);
+  }, [miner, poolProfiles, savedCoinId]);
 
   const fetchStatus = useCallback(async () => {
     if (!decodedIp) return;
@@ -133,6 +159,70 @@ export default function MinerDetail() {
     const id = setInterval(fetchStatus, POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [fetchStatus]);
+
+  useEffect(() => {
+    setPoolFeePercent(defaultFeePercent);
+  }, [defaultFeePercent]);
+
+  useEffect(() => {
+    invoke<PoolProfile[]>("get_saved_pools")
+      .then(setPoolProfiles)
+      .catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    invoke<SavedMiner[]>("get_saved_miners").then((miners) => {
+      const found = miners.find((m) => m.ip === decodedIp);
+      if (found) {
+        setThisWattage(found.wattage ?? minerWattage);
+        setSavedCoinId(found.coin_id ?? "kaspa");
+      }
+    }).catch(console.error);
+  }, [decodedIp, minerWattage]);
+
+  useEffect(() => {
+    invoke<CoinConfig[]>("get_coins").then(setCoins).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (!decodedIp) return;
+    invoke<UptimeStats>("get_uptime_stats", { ip: decodedIp, hours: 24 }).then(setUptime24h).catch(console.error);
+    invoke<UptimeStats>("get_uptime_stats", { ip: decodedIp, hours: 168 }).then(setUptime7d).catch(console.error);
+    invoke<UptimeStats>("get_uptime_stats", { ip: decodedIp, hours: 720 }).then(setUptime30d).catch(console.error);
+  }, [decodedIp]);
+
+  async function handleApplyPool() {
+    if (!selectedProfileId || !decodedIp) return;
+    const profile = poolProfiles.find((p) => p.id === selectedProfileId);
+    if (!profile) return;
+    setApplyingPool(true);
+    setApplyStatus(null);
+    try {
+      const msg = await invoke<string>("set_miner_pools", {
+        ip: decodedIp,
+        pools: profileToPayload(profile),
+      });
+      setApplyStatus({ ok: true, msg });
+      // Refresh miner data after a short delay to let it come back online
+      setTimeout(fetchStatus, 3000);
+    } catch (err) {
+      setApplyStatus({ ok: false, msg: String(err) });
+    } finally {
+      setApplyingPool(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!miner || !miner.online) return;
+    invoke<CoinEarnings>("calculate_coin_earnings", {
+      coinId,
+      hashrateGhs: miner.rtHashrate,
+      poolFeePercent,
+      currency,
+    })
+      .then(setEarnings)
+      .catch(console.error);
+  }, [miner, poolFeePercent, currency, coinId]);
 
   if (error && !miner) {
     return (
@@ -175,8 +265,6 @@ export default function MinerDetail() {
     unknown: "bg-slate-500",
   }[miner.status] ?? "bg-slate-500";
 
-  const activePool = miner.pools.find((p) => p.connect || p.state === 1);
-
   return (
     <div className="p-8 space-y-6">
       {/* Back button + header */}
@@ -202,6 +290,16 @@ export default function MinerDetail() {
           {lastRefresh && (
             <p className="text-xs text-slate-500">Updated: {lastRefresh}</p>
           )}
+          <button
+            onClick={() => openUrl(`http://${decodedIp}`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-800 border border-slate-700/50 hover:border-primary-500/50 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            Open Miner UI
+          </button>
           <span
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-white ${statusColor}`}
           >
@@ -219,6 +317,57 @@ export default function MinerDetail() {
         <HealthBadge ok={miner.health.temp} label="Temperature" />
       </div>
 
+      {/* Uptime Stats */}
+      {(uptime24h || uptime7d || uptime30d) && (
+        <div className="bg-dark-800 rounded-xl border border-slate-700/50 p-5">
+          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">
+            Uptime Statistics
+          </h3>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            {[
+              { label: "24h Uptime", stats: uptime24h },
+              { label: "7d Uptime", stats: uptime7d },
+              { label: "30d Uptime", stats: uptime30d },
+            ].map(({ label, stats }) => (
+              <div key={label} className="bg-dark-900 rounded-lg p-4">
+                <p className="text-xs text-slate-400 mb-1">{label}</p>
+                <p className="text-2xl font-bold text-white">
+                  {stats ? stats.uptime_percent.toFixed(1) : "--"}
+                  {stats && <span className="text-sm text-slate-400 ml-1">%</span>}
+                </p>
+                {stats && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    {stats.online_polls}/{stats.total_polls} polls online
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-xs text-slate-400">
+            <div>
+              <span className="text-slate-500">Last Downtime: </span>
+              {uptime24h?.last_downtime ? (
+                <span className="text-white">
+                  {Math.round((Date.now() / 1000 - uptime24h.last_downtime) / 3600)} hours ago
+                </span>
+              ) : (
+                <span className="text-emerald-400">No downtime recorded</span>
+              )}
+            </div>
+            <div>
+              <span className="text-slate-500">Current Streak: </span>
+              {uptime24h ? (
+                <span className={uptime24h.is_online ? "text-emerald-400" : "text-red-400"}>
+                  {Math.floor(uptime24h.current_streak_minutes / 60)}h {uptime24h.current_streak_minutes % 60}m {uptime24h.is_online ? "online" : "offline"}
+                </span>
+              ) : (
+                <span className="text-slate-500">--</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Summary row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
@@ -233,6 +382,106 @@ export default function MinerDetail() {
           </div>
         ))}
       </div>
+
+      {/* Estimated Earnings */}
+      <div className="bg-dark-800 rounded-xl border border-slate-700/50 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+            Estimated Earnings
+          </h3>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">Pool fee:</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              value={poolFeePercent}
+              onChange={(e) => setPoolFeePercent(parseFloat(e.target.value) || 0)}
+              className="w-16 bg-dark-900 border border-slate-700/50 rounded px-2 py-1 text-xs text-white text-center focus:outline-none focus:border-primary-500/70"
+            />
+            <span className="text-xs text-slate-500">%</span>
+          </div>
+        </div>
+        {earnings ? (() => {
+          const coin = coins.find((c) => c.id === coinId);
+          const ticker = coin?.ticker ?? coinId.toUpperCase();
+          const coinDecimals = ticker === "BTC" ? 6 : 2;
+          const weeklyCoins = earnings.dailyCoins * 7;
+          const weeklyFiat = earnings.dailyFiat * 7;
+          const dailyPowerKwh = thisWattage / 1000 * 24;
+          const dailyPowerCost = dailyPowerKwh * electricityCostPerKwh;
+          const dailyNet = earnings.dailyFiat - dailyPowerCost;
+          const monthlyNet = dailyNet * 30;
+          return (
+            <>
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { label: "Daily", coins: earnings.dailyCoins, fiat: earnings.dailyFiat, net: dailyNet },
+                  { label: "Weekly", coins: weeklyCoins, fiat: weeklyFiat, net: dailyNet * 7 },
+                  { label: "Monthly", coins: earnings.monthlyCoins, fiat: earnings.monthlyFiat, net: monthlyNet },
+                ].map((row) => (
+                  <div key={row.label} className="bg-dark-900 rounded-lg p-4">
+                    <p className="text-xs text-slate-400 mb-1">{row.label}</p>
+                    <p className="text-xl font-bold text-emerald-400">
+                      {row.coins.toFixed(coinDecimals)}
+                      <span className="text-sm text-slate-400 ml-1">{ticker}</span>
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">{row.fiat.toFixed(2)} {currencyCode} gross</p>
+                    <p className={`text-xs font-medium mt-1 ${row.net >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      {row.net.toFixed(2)} {currencyCode} net
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-700/30 flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                <span>Power: {dailyPowerKwh.toFixed(1)} kWh/day · {dailyPowerCost.toFixed(3)} {currencyCode}/day</span>
+                <span>{ticker}: {earnings.coinPrice.toFixed(4)} {currencyCode}</span>
+                <div className="flex items-center gap-2 ml-auto">
+                  <span className="text-slate-500">Wattage:</span>
+                  {wattageEditing ? (
+                    <>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={wattageInput}
+                        onChange={(e) => setWattageInput(e.target.value)}
+                        className="w-20 bg-dark-800 border border-primary-500/50 rounded px-2 py-0.5 text-xs text-white focus:outline-none"
+                      />
+                      <button
+                        onClick={async () => {
+                          const w = parseFloat(wattageInput) || thisWattage;
+                          await invoke("update_miner_wattage", { ip: decodedIp, wattage: w });
+                          setThisWattage(w);
+                          setWattageEditing(false);
+                        }}
+                        className="text-xs text-emerald-400 hover:text-emerald-300"
+                      >Save</button>
+                      <button onClick={() => setWattageEditing(false)} className="text-xs text-slate-500">Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-slate-300">{thisWattage}W</span>
+                      <button
+                        onClick={() => { setWattageInput(String(thisWattage)); setWattageEditing(true); }}
+                        className="text-xs text-slate-500 hover:text-slate-300"
+                      >Edit</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </>
+          );
+        })() : (
+          <p className="text-xs text-slate-500">
+            {miner.online ? "Fetching earnings data..." : "Miner is offline"}
+          </p>
+        )}
+      </div>
+
+      {/* Hashrate history chart */}
+      <HashrateDetailChart miner={miner} />
 
       {/* Firmware & Software */}
       <div className="bg-dark-800 rounded-xl border border-slate-700/50 p-5">
@@ -377,8 +626,76 @@ export default function MinerDetail() {
         </div>
       )}
 
-      {/* Hashrate history chart */}
-      <HashrateDetailChart miner={miner} />
+      {/* Apply Pool Configuration */}
+      <div className="bg-dark-800 rounded-xl border border-slate-700/50 p-5">
+        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">
+          Apply Pool Configuration
+        </h3>
+        {poolProfiles.length === 0 ? (
+          <p className="text-xs text-slate-500">
+            No pool profiles saved. Go to Settings to create one.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <select
+                value={selectedProfileId}
+                onChange={(e) => {
+                  setSelectedProfileId(e.target.value);
+                  setApplyStatus(null);
+                }}
+                className="flex-1 min-w-[200px] bg-dark-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
+              >
+                <option value="">Select a profile...</option>
+                {poolProfiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleApplyPool}
+                disabled={!selectedProfileId || applyingPool}
+                className="px-5 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex-shrink-0"
+              >
+                {applyingPool ? "Applying..." : "Apply"}
+              </button>
+            </div>
+
+            {applyingPool && (
+              <p className="text-xs text-amber-400">
+                Sending config — miner will restart mining process (may take 30+ seconds)...
+              </p>
+            )}
+
+            {applyStatus && (
+              <p className={`text-xs ${applyStatus.ok ? "text-emerald-400" : "text-red-400"}`}>
+                {applyStatus.ok ? "✓ " : "✗ "}{applyStatus.msg}
+              </p>
+            )}
+
+            {selectedProfileId && (() => {
+              const p = poolProfiles.find((x) => x.id === selectedProfileId);
+              if (!p || !p.pool1addr) return null;
+              return (
+                <div className="bg-dark-900 rounded-lg px-3 py-2 text-xs space-y-1">
+                  {[1, 2, 3].map((n) => {
+                    const addr = p[`pool${n}addr` as keyof PoolProfile];
+                    if (!addr) return null;
+                    return (
+                      <div key={n}>
+                        <span className="text-slate-500">Pool {n}: </span>
+                        <span className="text-slate-300">{addr}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }

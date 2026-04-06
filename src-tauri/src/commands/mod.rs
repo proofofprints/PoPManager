@@ -1,4 +1,14 @@
+pub mod alerts;
+pub mod coins;
+pub mod email;
+pub mod export;
+pub mod history;
 pub mod miner;
+pub mod notifications;
 pub mod pool;
+pub mod pool_profiles;
+pub mod preferences;
+pub mod profitability;
 pub mod scan;
 pub mod storage;
+pub mod uptime;

@@ -1,5 +1,29 @@
 export type MinerStatus = "online" | "offline" | "warning" | "unknown";
 
+export interface UptimeStats {
+  total_polls: number;
+  online_polls: number;
+  uptime_percent: number;
+  last_downtime: number | null;
+  current_streak_minutes: number;
+  is_online: boolean;
+}
+
+export interface CoinConfig {
+  id: string;
+  name: string;
+  ticker: string;
+  algorithm: string;
+  coingeckoId: string;
+  color: string;
+  networkHashrateUrl: string;
+  networkHashrateUnit: string;
+  blockRewardUrl: string;
+  blockRewardDivisor: number;
+  blockTimeSeconds: number;
+  defaultHashrateUnit: string;
+}
+
 export interface PoolInfo {
   no: number;
   addr: string;
@@ -56,6 +80,7 @@ export interface MinerInfo {
   hashrateHistory: HashrateHistory[];
   health: HealthState;
   lastSeen: string;
+  defaultWattage: number;
 }
 
 export interface ScanResult {
@@ -75,4 +100,102 @@ export interface SavedMiner {
   ip: string;
   label: string;
   added_at: string;
+  coin_id: string;
+  wattage?: number;
+}
+
+export interface EarningsEstimate {
+  dailyKas: number;
+  weeklyKas: number;
+  monthlyKas: number;
+  dailyUsd: number;
+  weeklyUsd: number;
+  monthlyUsd: number;
+  kasPrice: number;
+}
+
+export interface NetworkStats {
+  networkHashrate: number;
+  blockReward: number;
+}
+
+export interface CoinNetworkStats {
+  networkHashrateThs: number;
+  blockReward: number;
+  blockTimeSeconds: number;
+}
+
+export interface CoinEarnings {
+  dailyCoins: number;
+  monthlyCoins: number;
+  dailyFiat: number;
+  monthlyFiat: number;
+  coinPrice: number;
+}
+
+export interface PoolProfile {
+  id: string;
+  name: string;
+  pool1addr: string;
+  pool1miner: string;
+  pool1pwd: string;
+  pool2addr: string;
+  pool2miner: string;
+  pool2pwd: string;
+  pool3addr: string;
+  pool3miner: string;
+  pool3pwd: string;
+  fee_percent?: number;
+  coin_id?: string;
+}
+
+/** Payload for set_miner_pools — matches Iceriver machineconfig POST field names. */
+export interface PoolConfigPayload {
+  pool1address: string;
+  pool1miner: string;
+  pool1pwd: string;
+  pool2address: string;
+  pool2miner: string;
+  pool2pwd: string;
+  pool3address: string;
+  pool3miner: string;
+  pool3pwd: string;
+}
+
+export interface AppPreferences {
+  currency: string;
+  poolFeePercent: number;
+  electricityCostPerKwh: number;
+  minerWattage: number;
+  logLevel?: string;
+}
+
+export interface CoinSnapshot {
+  hashrate: number;
+  minerCount: number;
+  dailyEarningsCoins: number;
+  dailyEarningsFiat: number;
+}
+
+export interface FarmSnapshot {
+  timestamp: number;
+  totalHashrate: number;
+  onlineCount: number;
+  totalMiners: number;
+  coinData: Record<string, CoinSnapshot>;
+}
+
+/** Convert a saved PoolProfile to the API payload format. */
+export function profileToPayload(p: PoolProfile): PoolConfigPayload {
+  return {
+    pool1address: p.pool1addr,
+    pool1miner: p.pool1miner,
+    pool1pwd: p.pool1pwd,
+    pool2address: p.pool2addr,
+    pool2miner: p.pool2miner,
+    pool2pwd: p.pool2pwd,
+    pool3address: p.pool3addr,
+    pool3miner: p.pool3miner,
+    pool3pwd: p.pool3pwd,
+  };
 }
