@@ -7,6 +7,10 @@ Built by [Proof of Prints](https://proofofprints.com) | [Support: support@proofo
 ## Overview
 PoPManager is a free, open-source desktop application for monitoring and managing your ASIC mining operation. Built with Tauri (Rust + React), it runs on Windows, Linux, and macOS without requiring a dedicated mining OS. Monitor hashrates, temperatures, profitability, and manage pool configurations — all from one dashboard.
 
+## Screenshots
+
+![Dashboard Overview](docs/screenshots/Dashboard.png)
+
 ## Features
 
 ### Multi-Manufacturer Support
@@ -33,6 +37,10 @@ PoPManager is a free, open-source desktop application for monitoring and managin
 - Bulk pool configuration — apply pool profiles to multiple miners at once
 - Open miner web UI directly from the app
 
+![Miners Grid View](docs/screenshots/Miner%20Page%20Grid.png)
+![Miners Card View](docs/screenshots/Miner%20Page%20Card.png)
+![Miner Detail](docs/screenshots/Miner%20Detail.png)
+
 ### Profitability Tracking
 - Live coin prices via CoinGecko (12+ fiat currencies supported)
 - Electricity cost calculation with per-model wattage
@@ -45,6 +53,9 @@ PoPManager is a free, open-source desktop application for monitoring and managin
 - Email alerts via SMTP (SendGrid, Gmail, or any SMTP provider)
 - Alert history with acknowledge/dismiss workflow
 - Default alert rules created automatically on first launch
+
+![Alert Desktop Notification](docs/screenshots/Alert%20Desktop%20Notification.png)
+![Alert Page](docs/screenshots/Alert%20Screen.png)
 
 ### Pool Management
 - Saved pool profiles with per-pool fee percentages
@@ -62,6 +73,8 @@ PoPManager is a free, open-source desktop application for monitoring and managin
 - System tray mode — minimize to tray for background monitoring
 - Auto-update support via GitHub Releases
 - Native Windows notifications
+
+![System Tray Icon](docs/screenshots/Systray%20icon.png)
 
 ## Installation
 
