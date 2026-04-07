@@ -26,7 +26,7 @@
   "plugins": {
     "updater": {
       "endpoints": ["https://github.com/proofofprints/PoPManager/releases/latest/download/latest.json"],
-      "pubkey": ""
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU4ODdEOEYyRjRDNkZDRgpSV1RQYjB3dmozMklEdWY5MGwrKzJtK2lMWGw0U0EzTzNzVktxbWEzMnh0MGhvb3lHQzZ5b1M1SQo="
     }
   },
   "bundle": {
@@ -38,6 +38,12 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "wix": {
+        "bannerPath": "icons/msi-banner.bmp",
+        "dialogImagePath": "icons/msi-dialog.bmp"
+      }
+    }
   }
 }

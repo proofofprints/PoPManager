@@ -3,9 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs";
 import { check } from "@tauri-apps/plugin-updater";
-import { getVersion } from "@tauri-apps/plugin-app";
+import { getVersion } from "@tauri-apps/api/app";
 import { appLogDir } from "@tauri-apps/api/path";
-import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import type { SmtpConfig } from "../types/alerts";
 import popLogo from "../assets/PopLogo.png";
 import { useProfitability } from "../context/ProfitabilityContext";
@@ -189,8 +188,7 @@ export default function Settings() {
 
   async function handleOpenLogDir() {
     try {
-      const dir = await appLogDir();
-      await shellOpen(dir);
+      await invoke("open_log_directory");
     } catch (err) {
       console.error("Failed to open log directory:", err);
     }
@@ -553,9 +551,8 @@ export default function Settings() {
             </p>
           </div>
           <div className="space-y-4">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-slate-500">Current Version</span>
-              <span className="text-slate-200 font-mono">{currentVersion ?? "..."}</span>
+            <div className="text-sm text-slate-500">
+              Current Version{currentVersion ? `: v${currentVersion}` : ""}
             </div>
             {availableUpdate && (
               <div className="flex justify-between items-center text-sm">

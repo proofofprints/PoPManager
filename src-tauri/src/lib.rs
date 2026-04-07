@@ -15,7 +15,7 @@ use commands::storage::{
 use commands::pool_profiles::{
     get_saved_pools, add_pool_profile, update_pool_profile, remove_pool_profile,
 };
-use commands::preferences::{get_preferences, save_preferences, set_log_level};
+use commands::preferences::{get_preferences, save_preferences, set_log_level, open_log_directory};
 use commands::profitability::{get_kas_price, get_network_stats, calculate_earnings, get_coin_price, get_coin_network_stats, calculate_coin_earnings};
 use commands::history::{add_farm_snapshot, get_farm_history, clear_farm_history};
 use commands::alerts::{
@@ -173,6 +173,7 @@ pub fn run() {
             export_profitability_csv,
             export_farm_history_csv,
             set_log_level,
+            open_log_directory,
             update_tray_tooltip,
         ])
         .run(tauri::generate_context!())

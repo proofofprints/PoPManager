@@ -101,6 +101,34 @@ pub async fn save_preferences(
 }
 
 #[tauri::command]
+pub fn open_log_directory(app: tauri::AppHandle) -> Result<(), String> {
+    let log_dir = app.path().app_log_dir()
+        .map_err(|e| format!("Failed to get log dir: {}", e))?;
+    std::fs::create_dir_all(&log_dir)
+        .map_err(|e| format!("Failed to create log dir: {}", e))?;
+
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("explorer")
+        .arg(&log_dir)
+        .spawn()
+        .map_err(|e| format!("Failed to open explorer: {}", e))?;
+
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg(&log_dir)
+        .spawn()
+        .map_err(|e| format!("Failed to open finder: {}", e))?;
+
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open")
+        .arg(&log_dir)
+        .spawn()
+        .map_err(|e| format!("Failed to open file manager: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub fn set_log_level(level: String) -> Result<(), String> {
     let filter = match level.to_lowercase().as_str() {
         "error" => log::LevelFilter::Error,
