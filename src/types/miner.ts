@@ -174,6 +174,53 @@ export interface AppPreferences {
   minimizeToTray?: boolean;
 }
 
+export interface MobileMiner {
+  deviceId: string;
+  apiKey: string;
+  name: string;
+  deviceModel: string;
+  osVersion: string;
+  appVersion: string;
+  coin: string;
+  manufacturer: string;
+  model: string;
+  pool: string;
+  worker: string;
+  hashrateHs: number;
+  acceptedShares: number;
+  rejectedShares: number;
+  difficulty: number;
+  runtimeSeconds: number;
+  cpuTemp: number;
+  throttleState: string;
+  batteryLevel: number;
+  batteryCharging: boolean;
+  threads: number;
+  status: string;
+  errorMessage: string | null;
+  lastReportTimestamp: number;
+  registeredAt: number;
+  isOnline: boolean;
+}
+
+export interface MobileServerConfig {
+  enabled: boolean;
+  port: number;
+  requireApiKey: boolean;
+  reportIntervalSeconds: number;
+}
+
+export interface MobileCommand {
+  id: string;
+  deviceId: string;
+  type: string; // "set_config" | "set_threads" | "start" | "stop" | "restart"
+  params: Record<string, any> | null;
+  createdAt: number;
+  status: string; // "pending" | "applied" | "failed"
+  ackedAt: number | null;
+  error: string | null;
+}
+
 export interface CoinSnapshot {
   hashrate: number;
   minerCount: number;

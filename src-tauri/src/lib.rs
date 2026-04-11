@@ -1,4 +1,5 @@
 mod commands;
+mod http_server;
 
 use tauri::Manager;
 use tauri::menu::{Menu, MenuItem};
@@ -21,6 +22,7 @@ use commands::history::{add_farm_snapshot, get_farm_history, clear_farm_history}
 use commands::alerts::{
     get_alert_rules, add_alert_rule, update_alert_rule, remove_alert_rule,
     get_alert_history, clear_alert_history, acknowledge_alert, check_alerts,
+    check_mobile_alerts,
 };
 use commands::coins::{get_coins, add_coin, remove_coin};
 use commands::email::{get_smtp_config, save_smtp_config, test_smtp_config, send_alert_email};
@@ -28,6 +30,14 @@ use commands::notifications::send_desktop_notification;
 use commands::uptime::{record_uptime, get_uptime_stats, get_all_uptime_stats, clear_uptime_data};
 use commands::export::{export_miners_csv, export_alert_history_csv, export_profitability_csv, export_farm_history_csv};
 use commands::tray::{TrayState, update_tray_tooltip};
+use commands::mobile_miner::{
+    get_mobile_miners, remove_mobile_miner, update_mobile_miner_name,
+    get_mobile_server_config, save_mobile_server_config, get_mobile_server_url,
+    get_mobile_auth_code, regenerate_mobile_auth_code,
+    restart_mobile_server,
+    queue_mobile_command, get_mobile_commands, clear_mobile_command_history,
+    cancel_mobile_command,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -58,6 +68,66 @@ pub fn run() {
             app.manage(TrayState {
                 minimize_to_tray: std::sync::Mutex::new(prefs.minimize_to_tray),
             });
+
+            // Load mobile miner state and start HTTP server.
+            let mobile_config = commands::mobile_miner::load_config_from_disk();
+            let mobile_miners_map = commands::mobile_miner::load_miners_from_disk();
+            let mobile_commands_map = commands::mobile_miner::load_commands_from_disk();
+            let miners_arc = std::sync::Arc::new(commands::mobile_miner::MobileMinersState {
+                miners: std::sync::Mutex::new(mobile_miners_map),
+            });
+            let config_arc = std::sync::Arc::new(commands::mobile_miner::MobileServerConfigState {
+                config: std::sync::Mutex::new(mobile_config.clone()),
+            });
+            let commands_arc = std::sync::Arc::new(commands::mobile_miner::MobileCommandsState {
+                commands: std::sync::Mutex::new(mobile_commands_map),
+            });
+            app.manage(std::sync::Arc::clone(&miners_arc));
+            app.manage(std::sync::Arc::clone(&config_arc));
+            app.manage(std::sync::Arc::clone(&commands_arc));
+
+            // Offline detection task: mark miners as offline if they miss 2 intervals.
+            {
+                let miners_ref = std::sync::Arc::clone(&miners_arc);
+                let config_ref = std::sync::Arc::clone(&config_arc);
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+                        let interval_ms = {
+                            let cfg = config_ref.config.lock().unwrap();
+                            (cfg.report_interval_seconds as i64) * 2 * 1000
+                        };
+                        let now = chrono::Utc::now().timestamp_millis();
+                        let mut miners = miners_ref.miners.lock().unwrap();
+                        let mut changed = false;
+                        for miner in miners.values_mut() {
+                            if miner.is_online && (now - miner.last_report_timestamp) > interval_ms {
+                                miner.is_online = false;
+                                changed = true;
+                                log::info!(
+                                    "Mobile miner went offline: {} ({})",
+                                    miner.device_id,
+                                    miner.name
+                                );
+                            }
+                        }
+                        if changed {
+                            commands::mobile_miner::save_miners_to_disk(&miners);
+                        }
+                    }
+                });
+            }
+
+            // Start HTTP server if enabled.
+            if mobile_config.enabled {
+                let port = mobile_config.port;
+                let miners_srv = std::sync::Arc::clone(&miners_arc);
+                let config_srv = std::sync::Arc::clone(&config_arc);
+                let commands_srv = std::sync::Arc::clone(&commands_arc);
+                tauri::async_runtime::spawn(
+                    http_server::start_server(port, miners_srv, config_srv, commands_srv)
+                );
+            }
 
             // Build the system tray menu.
             let show = MenuItem::with_id(app, "show", "Open PoPManager", true, None::<&str>)?;
@@ -153,6 +223,7 @@ pub fn run() {
             clear_alert_history,
             acknowledge_alert,
             check_alerts,
+            check_mobile_alerts,
             get_coins,
             add_coin,
             remove_coin,
@@ -175,6 +246,19 @@ pub fn run() {
             set_log_level,
             open_log_directory,
             update_tray_tooltip,
+            get_mobile_miners,
+            remove_mobile_miner,
+            update_mobile_miner_name,
+            get_mobile_server_config,
+            save_mobile_server_config,
+            get_mobile_server_url,
+            get_mobile_auth_code,
+            regenerate_mobile_auth_code,
+            restart_mobile_server,
+            queue_mobile_command,
+            get_mobile_commands,
+            clear_mobile_command_history,
+            cancel_mobile_command,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
