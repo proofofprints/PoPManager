@@ -4,11 +4,12 @@ import { check } from "@tauri-apps/plugin-updater";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import MinerList from "./pages/MinerList";
-import Monitoring from "./pages/Monitoring";
 import Settings from "./pages/Settings";
 import MinerDetail from "./pages/MinerDetail";
 import Alerts from "./pages/Alerts";
 import Pools from "./pages/Pools";
+import MobileMinerList from "./pages/MobileMinerList";
+import MobileMinerDetail from "./pages/MobileMinerDetail";
 import { ProfitabilityProvider } from "./context/ProfitabilityContext";
 import { AlertProvider } from "./context/AlertContext";
 
@@ -52,7 +53,8 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/miners" element={<MinerList />} />
-                  <Route path="/monitoring" element={<Monitoring />} />
+                  <Route path="/mobile-miners" element={<MobileMinerList />} />
+                  <Route path="/mobile-miners/:deviceId" element={<MobileMinerDetail />} />
                   <Route path="/pools" element={<Pools />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/miner/:ip" element={<MinerDetail />} />
