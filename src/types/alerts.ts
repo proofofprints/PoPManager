@@ -1,4 +1,12 @@
-export type RuleType = "HashrateDrop" | "TempAbove" | "MinerOffline" | "NoShares";
+export type RuleType =
+  | "HashrateDrop"
+  | "TempAbove"
+  | "MinerOffline"
+  | "NoShares"
+  | "MobileBatteryLow"
+  | "MobileCpuTempAbove"
+  | "MobileThrottle"
+  | "MobileOffline";
 
 export interface AlertRule {
   id: string;
@@ -42,4 +50,14 @@ export interface MinerSnapshot {
   rtHashrate: number;
   boards: { inTmp: number; outTmp: number }[];
   acceptedShares?: number;
+}
+
+export interface MobileMinerSnapshot {
+  deviceId: string;
+  name: string;
+  isOnline: boolean;
+  batteryLevel: number;
+  batteryCharging: boolean;
+  cpuTemp: number;
+  throttleState: string;
 }
