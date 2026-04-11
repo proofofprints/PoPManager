@@ -28,6 +28,7 @@ export default function MobileMinerDetail() {
   // Remove device modal state
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!deviceId) return;
@@ -123,7 +124,7 @@ export default function MobileMinerDetail() {
       navigate("/mobile-miners");
     } catch (err) {
       console.error("Failed to remove device:", err);
-      alert(`Failed to remove device: ${err}`);
+      setRemoveError(String(err));
     } finally {
       setRemoving(false);
     }
@@ -361,7 +362,7 @@ export default function MobileMinerDetail() {
           Remove this device from PoPManager. A cleanup sequence will be queued before deletion.
         </p>
         <button
-          onClick={() => setShowRemoveModal(true)}
+          onClick={() => { setRemoveError(null); setShowRemoveModal(true); }}
           className="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-600/40 text-red-300 text-sm font-medium rounded-lg transition-colors"
         >
           Remove Device
@@ -372,7 +373,7 @@ export default function MobileMinerDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => !removing && setShowRemoveModal(false)}
+            onClick={() => { if (!removing) { setShowRemoveModal(false); setRemoveError(null); } }}
           />
           <div className="relative z-10 bg-dark-800 border border-red-900/40 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
             <h3 className="text-lg font-semibold text-white mb-3">Remove {miner.name}?</h3>
@@ -393,9 +394,14 @@ export default function MobileMinerDetail() {
                 on its next report. To permanently remove it, first change or clear the server URL in the KASMobileMiner app.
               </p>
             </div>
+            {removeError && (
+              <div className="mb-4 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">
+                {removeError}
+              </div>
+            )}
             <div className="flex gap-2 justify-end">
               <button
-                onClick={() => setShowRemoveModal(false)}
+                onClick={() => { setShowRemoveModal(false); setRemoveError(null); }}
                 disabled={removing}
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm rounded-lg"
               >

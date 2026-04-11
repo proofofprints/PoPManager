@@ -609,6 +609,7 @@ export default function MinerList() {
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeTargetIps, setRemoveTargetIps] = useState<string[]>([]);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   const [allUptimeStats, setAllUptimeStats] = useState<Record<string, UptimeStats>>({});
 
@@ -952,6 +953,7 @@ export default function MinerList() {
 
   function openRemoveModal(ips: string[]) {
     setRemoveTargetIps(ips);
+    setRemoveError(null);
     setShowRemoveModal(true);
   }
 
@@ -959,6 +961,7 @@ export default function MinerList() {
     if (removing) return;
     setShowRemoveModal(false);
     setRemoveTargetIps([]);
+    setRemoveError(null);
   }
 
   async function handleConfirmRemove() {
@@ -983,7 +986,7 @@ export default function MinerList() {
       fetchAllStatuses(updated);
     } catch (err) {
       console.error("Bulk remove failed:", err);
-      alert(`Failed to remove miners: ${err}`);
+      setRemoveError(String(err));
     } finally {
       setRemoving(false);
     }
@@ -1554,6 +1557,11 @@ export default function MinerList() {
                 This only removes the miners from PoPManager's monitoring list. The physical miners themselves are not affected and will continue mining. You can re-add them later via Add Device.
               </p>
             </div>
+            {removeError && (
+              <div className="mb-4 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">
+                {removeError}
+              </div>
+            )}
             <div className="flex gap-2 justify-end">
               <button
                 onClick={closeRemoveModal}

@@ -758,7 +758,7 @@ export default function Settings() {
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Supported Hardware</span>
-              <span className="text-slate-200">Iceriver KS0 / KS0 Pro / KS0 Ultra</span>
+              <span className="text-slate-200">Iceriver KS0-KS5, Whatsminer M50/M56/M60/M66, Antminer S19/S21</span>
             </div>
             <div className="flex justify-between items-center pt-1">
               <span className="text-slate-500">GitHub</span>
