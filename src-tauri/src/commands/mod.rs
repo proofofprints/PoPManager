@@ -1,4 +1,5 @@
 pub mod alerts;
+pub mod mobile_miner;
 pub mod antminer;
 pub mod coins;
 pub mod email;

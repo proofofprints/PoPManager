@@ -29,8 +29,17 @@ function thresholdLabel(ruleType: RuleType): string {
       return "Offline duration (# polls)";
     case "NoShares":
       return "Minutes without new shares";
+    case "MobileBatteryLow":
+      return "Trigger when battery below (%)";
+    case "MobileCpuTempAbove":
+      return "Trigger when CPU temp exceeds (°C)";
+    case "MobileThrottle":
+      return "(throttle state triggers automatically — threshold unused)";
+    case "MobileOffline":
+      return "Trigger after N consecutive missed polls";
   }
 }
+
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -541,10 +550,18 @@ export default function Alerts() {
                     onChange={(e) => updateRuleForm("ruleType", e.target.value as RuleType)}
                     className="w-full bg-dark-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
                   >
-                    <option value="HashrateDrop">Hashrate Drop</option>
-                    <option value="TempAbove">Temperature Above</option>
-                    <option value="MinerOffline">Miner Offline</option>
-                    <option value="NoShares">No Shares</option>
+                    <optgroup label="ASIC Miners">
+                      <option value="HashrateDrop">Hashrate Drop</option>
+                      <option value="TempAbove">Temperature Above</option>
+                      <option value="MinerOffline">Miner Offline</option>
+                      <option value="NoShares">No Shares</option>
+                    </optgroup>
+                    <optgroup label="Mobile Miners">
+                      <option value="MobileBatteryLow">Mobile Battery Low</option>
+                      <option value="MobileCpuTempAbove">Mobile CPU Temp High</option>
+                      <option value="MobileThrottle">Mobile Thermal Throttle</option>
+                      <option value="MobileOffline">Mobile Miner Offline</option>
+                    </optgroup>
                   </select>
                 </div>
 
@@ -556,7 +573,8 @@ export default function Alerts() {
                     type="number"
                     value={ruleForm.threshold}
                     onChange={(e) => updateRuleForm("threshold", Number(e.target.value))}
-                    className="w-full bg-dark-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
+                    disabled={ruleForm.ruleType === "MobileThrottle"}
+                    className="w-full bg-dark-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-40"
                     min={0}
                   />
                 </div>

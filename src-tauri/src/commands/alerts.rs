@@ -12,6 +12,11 @@ pub enum RuleType {
     TempAbove,
     MinerOffline,
     NoShares,
+    // Mobile-specific rule types
+    MobileBatteryLow,
+    MobileCpuTempAbove,
+    MobileThrottle,
+    MobileOffline,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,10 +68,52 @@ pub struct BoardSnapshot {
     pub out_tmp: f64,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileMinerSnapshot {
+    pub device_id: String,
+    pub name: String,
+    pub is_online: bool,
+    #[serde(default)]
+    pub battery_level: f64,
+    #[serde(default)]
+    pub battery_charging: bool,
+    #[serde(default)]
+    pub cpu_temp: f64,
+    #[serde(default)]
+    pub throttle_state: String,
+}
+
+fn is_mobile_rule(rt: &RuleType) -> bool {
+    matches!(
+        rt,
+        RuleType::MobileBatteryLow
+            | RuleType::MobileCpuTempAbove
+            | RuleType::MobileThrottle
+            | RuleType::MobileOffline
+    )
+}
+
 static COOLDOWNS: Mutex<Option<HashMap<String, i64>>> = Mutex::new(None);
 static OFFLINE_COUNTS: Mutex<Option<HashMap<String, u32>>> = Mutex::new(None);
 // Maps miner IP → (last_accepted_count, last_change_instant)
 static SHARE_TRACKER: Mutex<Option<HashMap<String, (f64, Instant)>>> = Mutex::new(None);
+// Startup grace period — alerts are suppressed for the first N seconds after
+// the process starts so that stateful checks (NoShares, MinerOffline, etc.)
+// have time to warm up from a cold boot. Prevents alert storms when PoPManager
+// is restarted while miners are running normally.
+static STARTUP_INSTANT: Mutex<Option<Instant>> = Mutex::new(None);
+const STARTUP_GRACE_SECONDS: u64 = 300; // 5 minutes
+
+fn within_startup_grace() -> (bool, u64) {
+    let mut guard = match STARTUP_INSTANT.lock() {
+        Ok(g) => g,
+        Err(_) => return (false, 0),
+    };
+    let startup = *guard.get_or_insert_with(Instant::now);
+    let elapsed = Instant::now().duration_since(startup).as_secs();
+    (elapsed < STARTUP_GRACE_SECONDS, STARTUP_GRACE_SECONDS.saturating_sub(elapsed))
+}
 
 fn rules_path() -> PathBuf {
     let base = dirs::data_local_dir().unwrap_or_else(|| {
@@ -170,6 +217,50 @@ fn default_rules() -> Vec<AlertRule> {
             notify_desktop: true,
             notify_email: true,
             cooldown_minutes: 30,
+        },
+        AlertRule {
+            id: format!("{}-5", now_hex),
+            name: "Mobile Battery Low".to_string(),
+            enabled: true,
+            rule_type: RuleType::MobileBatteryLow,
+            threshold: 20.0,
+            applies_to: vec![],
+            notify_desktop: true,
+            notify_email: true,
+            cooldown_minutes: 30,
+        },
+        AlertRule {
+            id: format!("{}-6", now_hex),
+            name: "Mobile Thermal Throttle".to_string(),
+            enabled: true,
+            rule_type: RuleType::MobileThrottle,
+            threshold: 0.0,
+            applies_to: vec![],
+            notify_desktop: true,
+            notify_email: false,
+            cooldown_minutes: 15,
+        },
+        AlertRule {
+            id: format!("{}-7", now_hex),
+            name: "Mobile CPU Hot".to_string(),
+            enabled: true,
+            rule_type: RuleType::MobileCpuTempAbove,
+            threshold: 65.0,
+            applies_to: vec![],
+            notify_desktop: true,
+            notify_email: true,
+            cooldown_minutes: 30,
+        },
+        AlertRule {
+            id: format!("{}-8", now_hex),
+            name: "Mobile Miner Offline".to_string(),
+            enabled: true,
+            rule_type: RuleType::MobileOffline,
+            threshold: 2.0,
+            applies_to: vec![],
+            notify_desktop: true,
+            notify_email: true,
+            cooldown_minutes: 15,
         },
     ]
 }
@@ -275,11 +366,28 @@ pub fn check_alerts(miners: Vec<MinerSnapshot>) -> Result<Vec<AlertEvent>, Strin
         }
     }
 
+    // Startup grace period — trackers have been updated above, but we
+    // suppress alert evaluation so stateful rules (NoShares, MinerOffline)
+    // don't fire against a cold-boot baseline.
+    let (in_grace, remaining) = within_startup_grace();
+    if in_grace {
+        log::debug!(
+            "ASIC alert evaluation suppressed during startup grace period ({}s remaining, {} miners tracked)",
+            remaining,
+            miners.len()
+        );
+        return Ok(vec![]);
+    }
+
     let mut triggered: Vec<AlertEvent> = Vec::new();
     let mut idx: u32 = 0;
 
     for rule in &rules {
         if !rule.enabled {
+            continue;
+        }
+        // Skip mobile rule types — handled by check_mobile_alerts
+        if is_mobile_rule(&rule.rule_type) {
             continue;
         }
 
@@ -351,6 +459,11 @@ pub fn check_alerts(miners: Vec<MinerSnapshot>) -> Result<Vec<AlertEvent>, Strin
                         None
                     }
                 }
+                // Mobile rule types handled by check_mobile_alerts (already filtered above)
+                RuleType::MobileBatteryLow
+                | RuleType::MobileCpuTempAbove
+                | RuleType::MobileThrottle
+                | RuleType::MobileOffline => None,
             };
 
             if let Some(msg) = message {
@@ -363,6 +476,158 @@ pub fn check_alerts(miners: Vec<MinerSnapshot>) -> Result<Vec<AlertEvent>, Strin
                     rule_name: rule.name.clone(),
                     miner_ip: miner.ip.clone(),
                     miner_label: miner.label.clone(),
+                    message: msg,
+                    timestamp: now.to_rfc3339(),
+                    acknowledged: false,
+                    notify_desktop: rule.notify_desktop,
+                    notify_email: rule.notify_email,
+                };
+                triggered.push(event);
+            }
+        }
+    }
+
+    if !triggered.is_empty() {
+        let mut history = load_history();
+        for e in &triggered {
+            history.push(e.clone());
+        }
+        if history.len() > 100 {
+            let start = history.len() - 100;
+            history = history[start..].to_vec();
+        }
+        save_history(&history)?;
+    }
+
+    Ok(triggered)
+}
+
+#[tauri::command]
+pub fn check_mobile_alerts(miners: Vec<MobileMinerSnapshot>) -> Result<Vec<AlertEvent>, String> {
+    let rules = load_rules();
+    let now = Utc::now();
+    let now_ts = now.timestamp();
+
+    let mut cooldowns_guard = COOLDOWNS.lock().map_err(|e| e.to_string())?;
+    let cooldowns = cooldowns_guard.get_or_insert_with(HashMap::new);
+
+    let mut offline_guard = OFFLINE_COUNTS.lock().map_err(|e| e.to_string())?;
+    let offline_counts = offline_guard.get_or_insert_with(HashMap::new);
+
+    for miner in &miners {
+        let count = offline_counts.entry(miner.device_id.clone()).or_insert(0);
+        if miner.is_online {
+            *count = 0;
+        } else {
+            *count += 1;
+        }
+    }
+
+    // Startup grace period — same rationale as check_alerts. Trackers are
+    // updated above so counters warm up, but alert evaluation is suppressed.
+    let (in_grace, remaining) = within_startup_grace();
+    if in_grace {
+        log::debug!(
+            "Mobile alert evaluation suppressed during startup grace period ({}s remaining, {} devices tracked)",
+            remaining,
+            miners.len()
+        );
+        return Ok(vec![]);
+    }
+
+    let mut triggered: Vec<AlertEvent> = Vec::new();
+    let mut idx: u32 = 0;
+
+    for rule in &rules {
+        if !rule.enabled {
+            continue;
+        }
+        if !is_mobile_rule(&rule.rule_type) {
+            continue;
+        }
+
+        for miner in &miners {
+            if !rule.applies_to.is_empty() && !rule.applies_to.contains(&miner.device_id) {
+                continue;
+            }
+
+            let cooldown_key = format!("{}:{}", rule.id, miner.device_id);
+            if let Some(&last_ts) = cooldowns.get(&cooldown_key) {
+                let elapsed_mins = (now_ts - last_ts) / 60;
+                if elapsed_mins < rule.cooldown_minutes as i64 {
+                    continue;
+                }
+            }
+
+            let message = match rule.rule_type {
+                RuleType::MobileBatteryLow => {
+                    if miner.is_online
+                        && !miner.battery_charging
+                        && miner.battery_level > 0.0
+                        && miner.battery_level < rule.threshold
+                    {
+                        Some(format!(
+                            "Battery at {:.0}% (threshold: {:.0}%)",
+                            miner.battery_level, rule.threshold
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                RuleType::MobileCpuTempAbove => {
+                    if miner.is_online && miner.cpu_temp > rule.threshold {
+                        Some(format!(
+                            "CPU temperature {:.1}°C exceeds threshold {:.1}°C",
+                            miner.cpu_temp, rule.threshold
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                RuleType::MobileThrottle => {
+                    if miner.is_online
+                        && (miner.throttle_state == "severe"
+                            || miner.throttle_state == "critical"
+                            || miner.throttle_state == "moderate")
+                    {
+                        Some(format!("Thermal throttling: {}", miner.throttle_state))
+                    } else {
+                        None
+                    }
+                }
+                RuleType::MobileOffline => {
+                    let count = offline_counts.get(&miner.device_id).copied().unwrap_or(0);
+                    if count >= rule.threshold as u32 {
+                        Some(format!(
+                            "Mobile miner offline for {} consecutive poll(s)",
+                            count
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                // ASIC rule types — never reached due to is_mobile_rule guard
+                RuleType::HashrateDrop
+                | RuleType::TempAbove
+                | RuleType::MinerOffline
+                | RuleType::NoShares => None,
+            };
+
+            if let Some(msg) = message {
+                log::info!(
+                    "Mobile alert triggered: rule='{}' device={} — {}",
+                    rule.name,
+                    miner.device_id,
+                    msg
+                );
+                cooldowns.insert(cooldown_key, now_ts);
+                idx += 1;
+                let event = AlertEvent {
+                    id: format!("{:x}-m{}", now_ts, idx),
+                    rule_id: rule.id.clone(),
+                    rule_name: rule.name.clone(),
+                    miner_ip: miner.device_id.clone(),
+                    miner_label: miner.name.clone(),
                     message: msg,
                     timestamp: now.to_rfc3339(),
                     acknowledged: false,

@@ -56,11 +56,11 @@ export default function Sidebar() {
             <circle cx="18" cy="8"  r="0.75" fill="currentColor" stroke="none" />
             <circle cx="18" cy="11" r="0.75" fill="currentColor" stroke="none" />
           </svg>
-          Miners
+          ASIC Miners
         </NavLink>
 
         <NavLink
-          to="/monitoring"
+          to="/mobile-miners"
           className={({ isActive }) =>
             `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
               isActive
@@ -69,15 +69,11 @@ export default function Sidebar() {
             }`
           }
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"
-            />
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}>
+            <rect x="6" y="2" width="12" height="20" rx="2" />
+            <line x1="10" y1="18" x2="14" y2="18" />
           </svg>
-          Monitoring
+          Mobile Miners
         </NavLink>
 
         <NavLink

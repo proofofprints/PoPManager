@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { check } from "@tauri-apps/plugin-updater";
 import { getVersion } from "@tauri-apps/api/app";
 import { appLogDir } from "@tauri-apps/api/path";
 import type { SmtpConfig } from "../types/alerts";
 import popLogo from "../assets/PopLogo.png";
 import { useProfitability } from "../context/ProfitabilityContext";
+import PairingCodePanel from "../components/PairingCodePanel";
 
 const EMPTY_SMTP: SmtpConfig = {
   smtpHost: "",
@@ -40,6 +42,13 @@ export default function Settings() {
   const [logLevelSaving, setLogLevelSaving] = useState(false);
   const [logLevelMsg, setLogLevelMsg] = useState<string | null>(null);
   const [logExporting, setLogExporting] = useState(false);
+
+  // Mobile miner server state
+  const [mobileConfig, setMobileConfig] = useState<{ enabled: boolean; port: number; requireApiKey: boolean; reportIntervalSeconds: number }>({ enabled: true, port: 8787, requireApiKey: true, reportIntervalSeconds: 30 });
+  const [mobileServerUrl, setMobileServerUrl] = useState<string>("");
+  const [mobileSaving, setMobileSaving] = useState(false);
+  const [mobileMsg, setMobileMsg] = useState<string | null>(null);
+  const [mobileCopied, setMobileCopied] = useState(false);
 
   // Update state
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
@@ -77,6 +86,31 @@ export default function Settings() {
       })
       .catch(console.error);
   }, []);
+
+  useEffect(() => {
+    invoke<{ enabled: boolean; port: number; requireApiKey: boolean; reportIntervalSeconds: number }>("get_mobile_server_config")
+      .then(setMobileConfig)
+      .catch(console.error);
+    invoke<string>("get_mobile_server_url")
+      .then(setMobileServerUrl)
+      .catch(console.error);
+  }, []);
+
+  // ---- Mobile miner handlers ----
+  async function handleSaveMobileConfig() {
+    setMobileSaving(true);
+    setMobileMsg(null);
+    try {
+      await invoke("save_mobile_server_config", { config: mobileConfig });
+      const url = await invoke<string>("get_mobile_server_url");
+      setMobileServerUrl(url);
+      setMobileMsg("Configuration saved. Restart the app to apply port changes.");
+    } catch (err) {
+      setMobileMsg(`Error: ${err}`);
+    } finally {
+      setMobileSaving(false);
+    }
+  }
 
   // ---- Preferences handlers ----
   async function handleSavePrefs() {
@@ -583,6 +617,111 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Mobile Miner Server */}
+        <div className="bg-dark-800 rounded-xl border border-slate-700/50 p-6">
+          <div className="mb-5">
+            <h3 className="text-lg font-semibold text-white">Mobile Miner Server</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Allow KASMobileMiner Android app to push telemetry to PoPManager over HTTP.
+            </p>
+          </div>
+          <div className="space-y-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={mobileConfig.enabled}
+                onChange={(e) => setMobileConfig((c) => ({ ...c, enabled: e.target.checked }))}
+                className="rounded border-slate-600 bg-dark-900 text-primary-600"
+              />
+              <span className="text-sm text-slate-300">Enable mobile miner server</span>
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Port</label>
+                <input
+                  type="number"
+                  value={mobileConfig.port}
+                  onChange={(e) => setMobileConfig((c) => ({ ...c, port: Number(e.target.value) }))}
+                  className="w-full bg-dark-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
+                  min={1024}
+                  max={65535}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Report Interval (seconds)
+                </label>
+                <input
+                  type="number"
+                  value={mobileConfig.reportIntervalSeconds}
+                  onChange={(e) =>
+                    setMobileConfig((c) => ({
+                      ...c,
+                      reportIntervalSeconds: Number(e.target.value),
+                    }))
+                  }
+                  className="w-full bg-dark-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
+                  min={10}
+                  max={300}
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={mobileConfig.requireApiKey}
+                onChange={(e) =>
+                  setMobileConfig((c) => ({ ...c, requireApiKey: e.target.checked }))
+                }
+                className="rounded border-slate-600 bg-dark-900 text-primary-600"
+              />
+              <span className="text-sm text-slate-300">Require API key authentication</span>
+            </label>
+            {mobileServerUrl && (
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Server URL</label>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={mobileServerUrl}
+                    className="flex-1 bg-dark-900 border border-slate-600 rounded-lg px-3 py-2 text-slate-300 text-sm font-mono"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(mobileServerUrl);
+                      setMobileCopied(true);
+                      setTimeout(() => setMobileCopied(false), 2000);
+                    }}
+                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded-lg transition-colors"
+                  >
+                    {mobileCopied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Windows Firewall may prompt to allow PoPManager on this port.
+                </p>
+              </div>
+            )}
+            {mobileMsg && <p className="text-xs text-amber-400">{mobileMsg}</p>}
+            <button
+              onClick={handleSaveMobileConfig}
+              disabled={mobileSaving}
+              className="px-5 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {mobileSaving ? "Saving..." : "Save Configuration"}
+            </button>
+            {mobileServerUrl && (
+              <div className="pt-2">
+                <PairingCodePanel
+                  serverUrl={mobileServerUrl}
+                  title="Device Pairing"
+                  subtitle="Use this code in the KASMobileMiner app to register a new device."
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* About Section */}
         <div className="bg-dark-800 rounded-xl border border-slate-700/50 p-6">
           <h3 className="text-lg font-semibold text-white mb-5">About</h3>
@@ -623,13 +762,65 @@ export default function Settings() {
             </div>
             <div className="flex justify-between items-center pt-1">
               <span className="text-slate-500">GitHub</span>
-              <span className="text-slate-500 text-xs italic">Coming soon</span>
+              <button
+                onClick={() => openUrl("https://github.com/proofofprints/PoPManager")}
+                className="text-primary-400 hover:text-primary-300 transition-colors text-sm"
+              >
+                github.com/proofofprints/PoPManager
+              </button>
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-slate-700/50">
-            <p className="text-xs text-slate-500 leading-relaxed">
+            <p className="text-xs text-slate-500 leading-relaxed mb-3">
               Profitability estimates are calculated based on current network difficulty, block rewards, coin prices, and configured pool fees. Actual earnings may vary due to pool luck, network difficulty changes, miner uptime, hardware efficiency, and market volatility. These figures are estimates only and should not be considered financial advice.
             </p>
+
+            <details className="group">
+              <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-300 transition-colors list-none flex items-center gap-1">
+                <svg className="w-3 h-3 transform transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                Legal & License Information
+              </summary>
+              <div className="mt-3 space-y-3 text-xs text-slate-500 leading-relaxed">
+                <div>
+                  <p className="text-slate-400 font-medium mb-1">No Warranty</p>
+                  <p>
+                    PoPManager is provided "AS IS", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and noninfringement. In no event shall the authors or copyright holders be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software or the use or other dealings in the software.
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium mb-1">No Support Guarantee</p>
+                  <p>
+                    PoPManager is an open-source project maintained on a best-effort basis. No support, service level agreement, or uptime guarantee is provided. Bug reports and feature requests may be submitted through the project's GitHub repository, but the maintainers make no commitment to respond or resolve issues within any specific timeframe.
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium mb-1">Use at Your Own Risk</p>
+                  <p>
+                    Cryptocurrency mining carries inherent risks including but not limited to hardware damage, electrical hazards, financial loss, regulatory changes, and market volatility. PoPManager provides monitoring and management tools only — it does not control hardware safety, electrical installation, or financial outcomes. Users are solely responsible for their mining operations, hardware configuration, electrical safety, regulatory compliance, tax obligations, and any financial consequences.
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium mb-1">Third-Party Services</p>
+                  <p>
+                    PoPManager may communicate with third-party services including cryptocurrency price APIs, network statistics providers, and mining pools. The maintainers are not responsible for the availability, accuracy, terms of service, or privacy practices of any third-party service. Data displayed from external sources is provided on an "as is" basis with no guarantees of accuracy or timeliness.
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium mb-1">Trademarks</p>
+                  <p>
+                    "Iceriver," "Antminer," "Whatsminer," and other hardware model names referenced throughout this software are trademarks of their respective owners. Use of these names is solely for hardware identification purposes and does not imply endorsement or affiliation. PoPManager is not affiliated with, sponsored by, or endorsed by any cryptocurrency project, hardware manufacturer, or mining pool mentioned within the software.
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium mb-1">MIT License</p>
+                  <p>
+                    Copyright (c) 2026 Proof of Prints. Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, subject to the conditions of the MIT License. Full license text available in the project's LICENSE file on GitHub.
+                  </p>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       </div>

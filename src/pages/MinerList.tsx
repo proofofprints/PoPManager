@@ -18,6 +18,7 @@ import { getCoinIcon } from "../utils/coinIcon";
 import { profileToPayload } from "../types/miner";
 import { useAlerts } from "../context/AlertContext";
 import type { MinerSnapshot } from "../types/alerts";
+import AsicAddDevicePanel from "../components/AsicAddDevicePanel";
 
 const POLL_INTERVAL_MS = 45_000;
 
@@ -559,6 +560,8 @@ export default function MinerList() {
 
   const [allUptimeStats, setAllUptimeStats] = useState<Record<string, UptimeStats>>({});
 
+  const [showAddPanel, setShowAddPanel] = useState(false);
+
   // Sync coin filter if URL param changes
   useEffect(() => {
     const coinParam = searchParams.get("coin");
@@ -626,6 +629,7 @@ export default function MinerList() {
         online: info.online,
         rtHashrate: info.rtHashrate,
         boards: info.boards.map((b) => ({ inTmp: b.inTmp, outTmp: b.outTmp })),
+        acceptedShares: info.pools.reduce((sum, p) => sum + (p.accepted || 0), 0),
       }));
       checkAlerts(snapshots);
     },
@@ -937,6 +941,15 @@ export default function MinerList() {
             <p className="text-xs text-slate-500">Last updated: {lastRefresh}</p>
           )}
           <button
+            onClick={() => setShowAddPanel((v) => !v)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-medium rounded-lg transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            {showAddPanel ? "Hide" : "Add Device"}
+          </button>
+          <button
             onClick={handleExportCSV}
             disabled={savedMiners.length === 0}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-800 border border-slate-700/50 hover:border-primary-500/50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 text-xs font-medium rounded-lg transition-colors"
@@ -965,6 +978,22 @@ export default function MinerList() {
           </button>
         </div>
       </div>
+
+      {showAddPanel && (
+        <div className="mb-6">
+          <AsicAddDevicePanel
+            onClose={() => setShowAddPanel(false)}
+            onMinersAdded={() => {
+              invoke<SavedMiner[]>("get_saved_miners")
+                .then((miners) => {
+                  setSavedMiners(miners);
+                  fetchAllStatuses(miners);
+                })
+                .catch(console.error);
+            }}
+          />
+        </div>
+      )}
 
       {/* Search + Filters + View Toggle */}
       {(minerData.length > 0 || loading) && (
@@ -1197,7 +1226,7 @@ export default function MinerList() {
             />
           </svg>
           <p className="text-lg font-medium">No miners found</p>
-          <p className="text-sm mt-1">Go to Monitoring to add miners</p>
+          <p className="text-sm mt-1">Click "Add Device" above to scan your network or add a miner manually</p>
         </div>
       ) : filteredData.length === 0 ? (
         <div className="text-center py-16 text-slate-500">

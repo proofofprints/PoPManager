@@ -10,12 +10,13 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import type { MinerInfo, SavedMiner, CoinEarnings, CoinConfig, FarmSnapshot, UptimeStats } from "../types/miner";
+import type { MinerInfo, SavedMiner, CoinEarnings, CoinConfig, FarmSnapshot, UptimeStats, MobileMiner } from "../types/miner";
 import { getMinerCoinId } from "../utils/coinLookup";
 import { getCoinIcon } from "../utils/coinIcon";
 import { useAlerts } from "../context/AlertContext";
 import { useProfitability } from "../context/ProfitabilityContext";
-import type { MinerSnapshot } from "../types/alerts";
+import type { MinerSnapshot, MobileMinerSnapshot } from "../types/alerts";
+import { formatMobileHashrate } from "./MobileMinerList";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 
@@ -61,12 +62,36 @@ interface CoinGroup {
 type ProfitRange = 1 | 6 | 24 | 168 | 720;
 type ChartRange = 1 | 6 | 24 | 168 | 720;
 
+function StatCard({
+  label,
+  value,
+  unit,
+  subline,
+}: {
+  label: string;
+  value: string | number;
+  unit?: string;
+  subline?: string;
+}) {
+  return (
+    <div className="bg-dark-800 rounded-xl border border-slate-700/50 p-5">
+      <p className="text-sm text-slate-400">{label}</p>
+      <p className="text-3xl font-bold text-white mt-1">
+        {value}
+        {unit && <span className="text-lg text-slate-400 ml-1">{unit}</span>}
+      </p>
+      {subline && <p className="text-xs text-emerald-400 mt-1">{subline}</p>}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { checkAlerts } = useAlerts();
+  const { checkAlerts, checkMobileAlerts } = useAlerts();
   const { currency, poolFeePercent, electricityCostPerKwh, minerWattage, poolProfiles } = useProfitability();
   const currencyCode = currency.toUpperCase();
   const [minerData, setMinerData] = useState<MinerWithSaved[]>([]);
+  const [mobileMiners, setMobileMiners] = useState<MobileMiner[]>([]);
   const [savedMiners, setSavedMiners] = useState<SavedMiner[]>([]);
   const [coins, setCoins] = useState<CoinConfig[]>([]);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
@@ -200,9 +225,28 @@ export default function Dashboard() {
       online: info.online,
       rtHashrate: info.rtHashrate,
       boards: info.boards.map((b) => ({ inTmp: b.inTmp, outTmp: b.outTmp })),
+      acceptedShares: info.pools.reduce((sum, p) => sum + (p.accepted || 0), 0),
     }));
     checkAlerts(snapshots);
-  }, [checkAlerts, poolProfiles]);
+
+    // Fetch mobile miners + evaluate mobile alerts
+    try {
+      const mobileList = await invoke<MobileMiner[]>("get_mobile_miners");
+      setMobileMiners(mobileList);
+      const mobileSnapshots: MobileMinerSnapshot[] = mobileList.map((m) => ({
+        deviceId: m.deviceId,
+        name: m.name,
+        isOnline: m.isOnline,
+        batteryLevel: m.batteryLevel,
+        batteryCharging: m.batteryCharging,
+        cpuTemp: m.cpuTemp,
+        throttleState: m.throttleState,
+      }));
+      checkMobileAlerts(mobileSnapshots);
+    } catch (err) {
+      console.error("Failed to load mobile miners:", err);
+    }
+  }, [checkAlerts, checkMobileAlerts, poolProfiles]);
 
   const fetchCoinEarnings = useCallback((groups: CoinGroup[], allMinerData: MinerWithSaved[]) => {
     groups.forEach(({ coinId, totalHashrate }) => {
@@ -266,6 +310,21 @@ export default function Dashboard() {
   const totalRtHashrate = miners.reduce((s, m) => s + m.rtHashrate, 0);
   const onlineCount = miners.filter((m) => m.online).length;
   const unit = miners.find((m) => m.online)?.hashrateUnit ?? "G";
+
+  // Mobile miner stats
+  const asicCount = miners.length;
+  const mobileCount = mobileMiners.length;
+  const totalCount = asicCount + mobileCount;
+  const onlineAsicCount = onlineCount;
+  const onlineMobileCount = mobileMiners.filter((m) => m.isOnline).length;
+  const totalOnline = onlineAsicCount + onlineMobileCount;
+
+  const asicHashrateGhs = totalRtHashrate;
+  const mobileHashrateHs = mobileMiners
+    .filter((m) => m.isOnline)
+    .reduce((s, m) => s + m.hashrateHs, 0);
+  const mobileHashrateGhs = mobileHashrateHs / 1e9;
+  const totalHashrateGhs = asicHashrateGhs + mobileHashrateGhs;
   const totalFarmWattage = useMemo(() => {
     return onlineMiners.reduce((sum, { saved }) => sum + (saved?.wattage ?? minerWattage), 0);
   }, [onlineMiners, minerWattage]);
@@ -341,7 +400,12 @@ export default function Dashboard() {
     const dailyPowerKwh = totalFarmWattage / 1000 * 24;
     const dailyPowerCost = dailyPowerKwh * electricityCostPerKwh;
     const dailyNet = dailyGross - dailyPowerCost;
+
+    // Scale by the chosen time window. profitRange is in hours (1, 6, 24, 168, 720).
+    const windowScale = profitRange / 24;
+
     return {
+      // Daily/monthly (unchanged — used elsewhere if needed)
       dailyGross,
       monthlyGross: dailyGross * 30,
       dailyPowerCost,
@@ -349,13 +413,28 @@ export default function Dashboard() {
       dailyNet,
       monthlyNet: dailyNet * 30,
       dailyPowerKwh,
+
+      // Windowed (NEW — for the selected profitRange)
+      windowGross: dailyGross * windowScale,
+      windowPowerCost: dailyPowerCost * windowScale,
+      windowNet: dailyNet * windowScale,
+      windowPowerKwh: dailyPowerKwh * windowScale,
     };
-  }, [coinEarnings, totalFarmWattage, electricityCostPerKwh]);
+  }, [coinEarnings, totalFarmWattage, electricityCostPerKwh, profitRange]);
 
   const profitRangeLabel = (r: ProfitRange) => {
     if (r === 168) return "7d";
     if (r === 720) return "30d";
     return `${r}h`;
+  };
+
+  const profitRangeUnitLabel = (r: ProfitRange) => {
+    if (r === 1) return `${currencyCode}/hour`;
+    if (r === 6) return `${currencyCode}/6h`;
+    if (r === 24) return `${currencyCode}/day`;
+    if (r === 168) return `${currencyCode}/week`;
+    if (r === 720) return `${currencyCode}/month`;
+    return currencyCode;
   };
 
   const hasEarnings = Object.keys(coinEarnings).length > 0;
@@ -407,24 +486,46 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Summary stats */}
+      {/* Summary stats — Miners breakdown */}
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        <StatCard
+          label="Total Miners"
+          value={totalCount}
+          subline={`${totalOnline} online`}
+        />
+        <StatCard
+          label="ASIC Miners"
+          value={asicCount}
+          subline={`${onlineAsicCount} online`}
+        />
+        <StatCard
+          label="Mobile Miners"
+          value={mobileCount}
+          subline={`${onlineMobileCount} online`}
+        />
+      </div>
+
+      {/* Hashrate breakdown + uptime */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        {[
-          { label: "Total Miners", value: miners.length, unit: "" },
-          { label: "Online", value: onlineCount, unit: "" },
-          { label: "Total Hashrate", value: totalRtHashrate.toFixed(1), unit: `${unit}H/s` },
-          { label: "Fleet Uptime (24h)", value: fleetUptime !== null ? fleetUptime.toFixed(1) : "--", unit: fleetUptime !== null ? "%" : "" },
-        ].map((stat) => (
-          <div key={stat.label} className="bg-dark-800 rounded-xl border border-slate-700/50 p-5">
-            <p className="text-sm text-slate-400">{stat.label}</p>
-            <p className="text-3xl font-bold text-white mt-1">
-              {stat.value}
-              {stat.unit && (
-                <span className="text-lg text-slate-400 ml-1">{stat.unit}</span>
-              )}
-            </p>
-          </div>
-        ))}
+        <StatCard
+          label="Total Hashrate"
+          value={totalHashrateGhs.toFixed(1)}
+          unit={`${unit}H/s`}
+        />
+        <StatCard
+          label="ASIC Hashrate"
+          value={asicHashrateGhs.toFixed(1)}
+          unit={`${unit}H/s`}
+        />
+        <StatCard
+          label="Mobile Hashrate"
+          value={formatMobileHashrate(mobileHashrateHs)}
+        />
+        <StatCard
+          label="Fleet Uptime (24h)"
+          value={fleetUptime !== null ? fleetUptime.toFixed(1) : "--"}
+          unit={fleetUptime !== null ? "%" : ""}
+        />
       </div>
 
       {fleetUptime !== null && (
@@ -472,34 +573,34 @@ export default function Dashboard() {
             <div className="bg-dark-900 rounded-lg p-4">
               <p className="text-xs text-slate-400 mb-1">Gross Earnings</p>
               <p className="text-2xl font-bold text-emerald-400">
-                {farmTotals.dailyGross.toFixed(2)}
-                <span className="text-sm text-slate-400 ml-1">{currencyCode}/day</span>
+                {farmTotals.windowGross.toFixed(2)}
+                <span className="text-sm text-slate-400 ml-1">{profitRangeUnitLabel(profitRange)}</span>
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                Monthly: {farmTotals.monthlyGross.toFixed(2)} {currencyCode}
+                Daily rate: {farmTotals.dailyGross.toFixed(2)} {currencyCode}
               </p>
             </div>
             {/* Power Cost */}
             <div className="bg-dark-900 rounded-lg p-4">
               <p className="text-xs text-slate-400 mb-1">Power Cost</p>
               <p className="text-2xl font-bold text-amber-400">
-                {farmTotals.dailyPowerCost.toFixed(2)}
-                <span className="text-sm text-slate-400 ml-1">{currencyCode}/day</span>
+                {farmTotals.windowPowerCost.toFixed(2)}
+                <span className="text-sm text-slate-400 ml-1">{profitRangeUnitLabel(profitRange)}</span>
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                Monthly: {farmTotals.monthlyPowerCost.toFixed(2)} {currencyCode}
+                Daily rate: {farmTotals.dailyPowerCost.toFixed(2)} {currencyCode}
               </p>
               <p className="text-xs text-slate-600 mt-0.5">{farmTotals.dailyPowerKwh.toFixed(1)} kWh/day</p>
             </div>
             {/* Net Profit */}
             <div className="bg-dark-900 rounded-lg p-4">
               <p className="text-xs text-slate-400 mb-1">Net Profit</p>
-              <p className={`text-2xl font-bold ${farmTotals.dailyNet >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                {farmTotals.dailyNet.toFixed(2)}
-                <span className="text-sm text-slate-400 ml-1">{currencyCode}/day</span>
+              <p className={`text-2xl font-bold ${farmTotals.windowNet >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {farmTotals.windowNet.toFixed(2)}
+                <span className="text-sm text-slate-400 ml-1">{profitRangeUnitLabel(profitRange)}</span>
               </p>
-              <p className={`text-xs mt-1 ${farmTotals.monthlyNet >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                Monthly: {farmTotals.monthlyNet.toFixed(2)} {currencyCode}
+              <p className={`text-xs mt-1 ${farmTotals.dailyNet >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                Daily rate: {farmTotals.dailyNet.toFixed(2)} {currencyCode}
               </p>
             </div>
           </div>
@@ -605,7 +706,7 @@ export default function Dashboard() {
             />
           </svg>
           <p className="text-lg font-medium">No miners found</p>
-          <p className="text-sm mt-1">Go to Monitoring to add miners</p>
+          <p className="text-sm mt-1">Go to ASIC Miners → Add Device</p>
         </div>
       ) : (
         <>
