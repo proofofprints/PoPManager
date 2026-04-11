@@ -1,8 +1,56 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
-import type { PoolProfile, SavedMiner, MinerInfo, CoinConfig } from "../types/miner";
+import type { PoolProfile, SavedMiner, MinerInfo, CoinConfig, MobileMiner } from "../types/miner";
 import { getCoinIcon } from "../utils/coinIcon";
+import { formatMobileHashrate } from "./MobileMinerList";
+
+type MinerKind = "asic" | "mobile";
+
+interface PoolMinerMatch {
+  kind: MinerKind;
+  id: string;
+  label: string;
+  subtitle: string;
+  coinId: string;
+  coinTicker: string;
+  online: boolean;
+  hashrateDisplay: string;
+  hashrateRaw: number; // normalized to GH/s
+  matchedSlot: 1 | 2 | 3;
+  onClick: () => void;
+}
+
+function hashrateUnitToGhsMultiplier(unit: string): number {
+  switch ((unit || "").toUpperCase()) {
+    case "K": return 1e-6;
+    case "M": return 1e-3;
+    case "G": return 1;
+    case "T": return 1e3;
+    case "P": return 1e6;
+    default: return 1;
+  }
+}
+
+const COIN_TICKER_TO_ID: Record<string, string> = {
+  KAS: "kaspa",
+  BTC: "bitcoin",
+};
+
+function coinIdFromTicker(ticker: string): string {
+  if (!ticker) return "kaspa";
+  return COIN_TICKER_TO_ID[ticker.toUpperCase()] ?? ticker.toLowerCase();
+}
+
+function splitWalletWorker(combined: string): { wallet: string; worker: string } {
+  if (!combined) return { wallet: "", worker: "" };
+  const lastDot = combined.lastIndexOf(".");
+  if (lastDot === -1) return { wallet: combined, worker: "" };
+  return {
+    wallet: combined.slice(0, lastDot),
+    worker: combined.slice(lastDot + 1),
+  };
+}
 
 const EMPTY_FORM = {
   name: "",
@@ -141,16 +189,6 @@ function PoolFormFields({
   );
 }
 
-interface MinerMatch {
-  ip: string;
-  label: string;
-  model: string;
-  coinId: string;
-  online: boolean;
-  hashrate: number;
-  hashrateUnit: string;
-}
-
 export default function Pools() {
   const navigate = useNavigate();
 
@@ -167,10 +205,20 @@ export default function Pools() {
   const [minerData, setMinerData] = useState<Map<string, MinerInfo>>(new Map());
   const [loadingMiners, setLoadingMiners] = useState(true);
   const [coins, setCoins] = useState<CoinConfig[]>([]);
+  const [mobileMiners, setMobileMiners] = useState<MobileMiner[]>([]);
+
+  // Push-to-mobile modal state
+  const [showPushModal, setShowPushModal] = useState(false);
+  const [pushSelectedIds, setPushSelectedIds] = useState<Set<string>>(new Set());
+  const [pushRunning, setPushRunning] = useState(false);
+  const [pushResults, setPushResults] = useState<
+    Record<string, { state: "idle" | "applying" | "success" | "error"; msg: string }>
+  >({});
 
   useEffect(() => {
     invoke<PoolProfile[]>("get_saved_pools").then(setProfiles).catch(console.error);
     invoke<CoinConfig[]>("get_coins").then(setCoins).catch(console.error);
+    invoke<MobileMiner[]>("get_mobile_miners").then(setMobileMiners).catch(console.error);
 
     invoke<SavedMiner[]>("get_saved_miners")
       .then(async (miners) => {
@@ -188,6 +236,14 @@ export default function Pools() {
       })
       .catch(console.error)
       .finally(() => setLoadingMiners(false));
+  }, []);
+
+  // Poll mobile miners every 30s so matches stay fresh
+  useEffect(() => {
+    const id = setInterval(() => {
+      invoke<MobileMiner[]>("get_mobile_miners").then(setMobileMiners).catch(console.error);
+    }, 30000);
+    return () => clearInterval(id);
   }, []);
 
   function updateForm(field: keyof FormState, value: string) {
@@ -289,38 +345,131 @@ export default function Pools() {
     }
   }
 
-  function getMinersForProfile(profile: PoolProfile): MinerMatch[] {
-    const profileHostname = extractHostname(profile.pool1addr);
-    return savedMiners
-      .map((saved): MinerMatch | null => {
-        const info = minerData.get(saved.ip);
-        if (!info) return null;
-        const activePool = info.pools.find((p) => p.connect) ?? info.pools[0];
-        if (!activePool) return null;
-        const minerHostname = extractHostname(activePool.addr);
-        if (!profileHostname || !minerHostname || minerHostname !== profileHostname) return null;
-        const label =
-          saved.label && saved.label !== saved.ip
-            ? saved.label
-            : info.hostname || saved.ip;
-        return {
-          ip: saved.ip,
-          label,
-          model: info.model,
-          coinId: saved.coin_id,
-          online: info.online,
-          hashrate: info.rtHashrate,
-          hashrateUnit: info.hashrateUnit,
-        };
-      })
-      .filter((m): m is MinerMatch => m !== null);
+  function getMinersForProfile(profile: PoolProfile): PoolMinerMatch[] {
+    const slots: { slot: 1 | 2 | 3; hostname: string }[] = ([1, 2, 3] as const)
+      .map((n) => ({
+        slot: n,
+        hostname: extractHostname(profile[`pool${n}addr` as keyof PoolProfile] as string),
+      }))
+      .filter((s) => s.hostname);
+
+    if (slots.length === 0) return [];
+
+    const matches: PoolMinerMatch[] = [];
+
+    // ASIC matches
+    for (const saved of savedMiners) {
+      const info = minerData.get(saved.ip);
+      if (!info) continue;
+      const activePool = info.pools.find((p) => p.connect) ?? info.pools[0];
+      if (!activePool) continue;
+      const minerHost = extractHostname(activePool.addr);
+      if (!minerHost) continue;
+      const matched = slots.find((s) => s.hostname === minerHost);
+      if (!matched) continue;
+
+      const label =
+        saved.label && saved.label !== saved.ip
+          ? saved.label
+          : info.hostname || saved.ip;
+
+      matches.push({
+        kind: "asic",
+        id: saved.ip,
+        label,
+        subtitle: info.model || "Unknown",
+        coinId: saved.coin_id,
+        coinTicker: (saved.coin_id || "").toUpperCase(),
+        online: info.online,
+        hashrateDisplay: `${info.rtHashrate.toFixed(2)} ${info.hashrateUnit}H/s`,
+        hashrateRaw: info.rtHashrate * hashrateUnitToGhsMultiplier(info.hashrateUnit),
+        matchedSlot: matched.slot,
+        onClick: () => navigate(`/miner/${encodeURIComponent(saved.ip)}`),
+      });
+    }
+
+    // Mobile matches
+    for (const m of mobileMiners) {
+      if (!m.pool) continue;
+      const minerHost = extractHostname(m.pool);
+      if (!minerHost) continue;
+      const matched = slots.find((s) => s.hostname === minerHost);
+      if (!matched) continue;
+
+      matches.push({
+        kind: "mobile",
+        id: m.deviceId,
+        label: m.name || m.deviceId.slice(0, 8),
+        subtitle:
+          [m.deviceModel, m.osVersion].filter(Boolean).join(" · ") || "Mobile",
+        coinId: coinIdFromTicker(m.coin),
+        coinTicker: (m.coin || "KAS").toUpperCase(),
+        online: m.isOnline,
+        hashrateDisplay: formatMobileHashrate(m.hashrateHs),
+        hashrateRaw: m.hashrateHs / 1e9,
+        matchedSlot: matched.slot,
+        onClick: () => navigate(`/mobile-miners/${encodeURIComponent(m.deviceId)}`),
+      });
+    }
+
+    return matches;
   }
 
   function getTotalHashrate(profile: PoolProfile): { value: number; unit: string } {
     const miners = getMinersForProfile(profile);
-    if (miners.length === 0) return { value: 0, unit: "TH" };
-    const total = miners.filter((m) => m.online).reduce((sum, m) => sum + m.hashrate, 0);
-    return { value: total, unit: miners[0].hashrateUnit };
+    if (miners.length === 0) return { value: 0, unit: "GH/s" };
+    const total = miners.filter((m) => m.online).reduce((sum, m) => sum + m.hashrateRaw, 0);
+    if (total >= 1000) return { value: total / 1000, unit: "TH/s" };
+    if (total >= 1) return { value: total, unit: "GH/s" };
+    if (total >= 0.001) return { value: total * 1000, unit: "MH/s" };
+    return { value: total * 1e6, unit: "KH/s" };
+  }
+
+  async function runPushToMobile() {
+    if (!selectedProfile || pushSelectedIds.size === 0 || pushRunning) return;
+    const { wallet, worker } = splitWalletWorker(selectedProfile.pool1miner);
+    const poolUrl = selectedProfile.pool1addr;
+
+    const ids = Array.from(pushSelectedIds);
+    const initial: Record<
+      string,
+      { state: "idle" | "applying" | "success" | "error"; msg: string }
+    > = {};
+    for (const id of ids) initial[id] = { state: "idle", msg: "" };
+    setPushResults(initial);
+    setPushRunning(true);
+
+    for (const deviceId of ids) {
+      setPushResults((prev) => ({
+        ...prev,
+        [deviceId]: { state: "applying", msg: "Queueing..." },
+      }));
+      try {
+        await invoke("queue_mobile_command", {
+          deviceId,
+          commandType: "set_config",
+          params: { poolUrl, wallet, worker },
+        });
+        setPushResults((prev) => ({
+          ...prev,
+          [deviceId]: { state: "success", msg: "Queued" },
+        }));
+      } catch (err) {
+        setPushResults((prev) => ({
+          ...prev,
+          [deviceId]: { state: "error", msg: String(err) },
+        }));
+      }
+    }
+
+    setPushRunning(false);
+  }
+
+  function closePushModal() {
+    if (pushRunning) return;
+    setShowPushModal(false);
+    setPushSelectedIds(new Set());
+    setPushResults({});
   }
 
   const selectedProfile = profiles.find((p) => p.id === selectedPool) ?? null;
@@ -404,6 +553,17 @@ export default function Pools() {
               })()}
             </div>
             <div className="flex items-center gap-2">
+              {mobileMiners.length > 0 && (
+                <button
+                  onClick={() => setShowPushModal(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Push to Mobile Miners
+                </button>
+              )}
               <button
                 onClick={() => startEdit(selectedProfile)}
                 className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-dark-800 hover:bg-dark-700 border border-slate-600 rounded-lg transition-colors"
@@ -500,7 +660,8 @@ export default function Pools() {
                   <thead>
                     <tr className="border-b border-slate-700/50">
                       <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Name / IP</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Slot</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Name / ID</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Model</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Coin</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">Hashrate</th>
@@ -509,8 +670,8 @@ export default function Pools() {
                   <tbody className="divide-y divide-slate-700/30">
                     {miners.map((m) => (
                       <tr
-                        key={m.ip}
-                        onClick={() => navigate(`/miner/${m.ip}`)}
+                        key={`${m.kind}-${m.id}`}
+                        onClick={m.onClick}
                         className="hover:bg-dark-700 cursor-pointer transition-colors"
                       >
                         <td className="px-4 py-3">
@@ -519,23 +680,53 @@ export default function Pools() {
                           />
                         </td>
                         <td className="px-4 py-3">
-                          <div className="text-sm text-white font-medium">{m.label}</div>
-                          <div className="text-xs text-slate-500 font-mono">{m.ip}</div>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full ${
+                              m.matchedSlot === 1
+                                ? "bg-emerald-500/20 text-emerald-400"
+                                : "bg-amber-500/20 text-amber-400"
+                            }`}
+                          >
+                            {m.matchedSlot === 1 ? "Primary" : `Backup ${m.matchedSlot - 1}`}
+                          </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-300">{m.model || "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            {m.kind === "mobile" && (
+                              <svg
+                                className="w-3.5 h-3.5 text-slate-500 flex-shrink-0"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"
+                                />
+                              </svg>
+                            )}
+                            <div>
+                              <div className="text-sm text-white font-medium">{m.label}</div>
+                              <div className="text-xs text-slate-500 font-mono">
+                                {m.kind === "asic" ? m.id : m.id.slice(0, 8) + "..."}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-300">{m.subtitle || "—"}</td>
                         <td className="px-4 py-3 text-sm text-slate-300">
                           <div className="flex items-center gap-1.5">
                             {getCoinIcon(m.coinId) && (
                               <img src={getCoinIcon(m.coinId)!} alt={m.coinId} className="w-4 h-4 rounded-full flex-shrink-0" />
                             )}
-                            <span className="uppercase">{m.coinId || "—"}</span>
+                            <span className="uppercase">{m.coinTicker || "—"}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right">
                           {m.online ? (
-                            <span className="text-sm text-slate-200">
-                              {m.hashrate.toFixed(2)} {m.hashrateUnit}H/s
-                            </span>
+                            <span className="text-sm text-slate-200">{m.hashrateDisplay}</span>
                           ) : (
                             <span className="text-sm text-red-400">Offline</span>
                           )}
@@ -548,6 +739,178 @@ export default function Pools() {
             )}
           </div>
         </div>
+
+        {showPushModal && selectedProfile && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closePushModal} />
+            <div className="relative z-10 bg-dark-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-2xl shadow-2xl">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">
+                    Push "{selectedProfile.name}" to Mobile Miners
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Queue a set_config command for each selected device. Changes apply on the device's next report.
+                  </p>
+                </div>
+                <button
+                  onClick={closePushModal}
+                  disabled={pushRunning}
+                  className="text-slate-400 hover:text-white disabled:opacity-30 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {(() => {
+                const { wallet, worker } = splitWalletWorker(selectedProfile.pool1miner);
+                return (
+                  <div className="bg-dark-900 rounded-lg p-3 mb-5 text-xs font-mono space-y-1">
+                    <div className="flex gap-2">
+                      <span className="text-slate-500 w-16 flex-shrink-0">Pool URL</span>
+                      <span className="text-slate-200 break-all">{selectedProfile.pool1addr}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-slate-500 w-16 flex-shrink-0">Wallet</span>
+                      <span className="text-slate-200 break-all">{wallet || "(empty)"}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-slate-500 w-16 flex-shrink-0">Worker</span>
+                      <span className="text-slate-200 break-all">{worker || "(empty)"}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-medium text-slate-400">
+                    Select Devices ({pushSelectedIds.size} / {mobileMiners.length})
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPushSelectedIds(new Set(mobileMiners.map((m) => m.deviceId)))}
+                      disabled={pushRunning}
+                      className="text-xs text-primary-400 hover:text-primary-300 disabled:opacity-40"
+                    >
+                      Select all
+                    </button>
+                    <span className="text-slate-600">·</span>
+                    <button
+                      onClick={() => setPushSelectedIds(new Set())}
+                      disabled={pushRunning}
+                      className="text-xs text-slate-500 hover:text-slate-300 disabled:opacity-40"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-dark-900 rounded-lg border border-slate-700/30 max-h-64 overflow-y-auto divide-y divide-slate-700/30">
+                  {mobileMiners.length === 0 ? (
+                    <p className="text-xs text-slate-500 text-center py-6">No mobile miners registered</p>
+                  ) : (
+                    mobileMiners.map((m) => {
+                      const isSelected = pushSelectedIds.has(m.deviceId);
+                      const result = pushResults[m.deviceId];
+                      const currentPoolHost = extractHostname(m.pool);
+                      const profileHost = extractHostname(selectedProfile.pool1addr);
+                      const alreadyOnPool = currentPoolHost && currentPoolHost === profileHost;
+
+                      return (
+                        <label
+                          key={m.deviceId}
+                          className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-dark-800 ${pushRunning ? "cursor-not-allowed" : ""}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={pushRunning}
+                            onChange={() => {
+                              setPushSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(m.deviceId)) next.delete(m.deviceId);
+                                else next.add(m.deviceId);
+                                return next;
+                              });
+                            }}
+                            className="rounded border-slate-600 bg-dark-900 text-primary-600 focus:ring-primary-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-white truncate">{m.name}</span>
+                              {alreadyOnPool && (
+                                <span className="text-xs text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                                  On this pool
+                                </span>
+                              )}
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${m.isOnline ? "bg-emerald-400" : "bg-slate-500"}`} />
+                            </div>
+                            <div className="text-xs text-slate-500 truncate">
+                              {m.deviceModel || "Mobile"} · {m.coin || "KAS"}
+                              {m.pool && !alreadyOnPool && (
+                                <span className="ml-2 text-slate-600">→ {extractHostname(m.pool)}</span>
+                              )}
+                            </div>
+                          </div>
+                          {result && (
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full ${
+                                result.state === "success"
+                                  ? "bg-emerald-500/20 text-emerald-400"
+                                  : result.state === "error"
+                                  ? "bg-red-500/20 text-red-400"
+                                  : result.state === "applying"
+                                  ? "bg-amber-500/20 text-amber-400"
+                                  : "bg-slate-500/20 text-slate-400"
+                              }`}
+                            >
+                              {result.state === "applying"
+                                ? "..."
+                                : result.state === "success"
+                                ? "✓"
+                                : result.state === "error"
+                                ? "✗"
+                                : ""}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <p className="text-xs text-amber-400/80 mb-4 flex items-start gap-1.5">
+                <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>
+                  Commands are queued immediately but only delivered when each device reports in. Offline devices will receive the config on their next successful report.
+                </span>
+              </p>
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={closePushModal}
+                  disabled={pushRunning}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm rounded-lg"
+                >
+                  {Object.keys(pushResults).length > 0 ? "Close" : "Cancel"}
+                </button>
+                <button
+                  onClick={runPushToMobile}
+                  disabled={pushRunning || pushSelectedIds.size === 0}
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg"
+                >
+                  {pushRunning ? "Pushing..." : `Push to ${pushSelectedIds.size} Device${pushSelectedIds.size !== 1 ? "s" : ""}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -623,7 +986,7 @@ export default function Pools() {
                           <span className="text-xs text-slate-500">…</span>
                         ) : totalHash > 0 ? (
                           <span className="text-sm text-slate-200">
-                            {totalHash.toFixed(2)} {unit}H/s
+                            {totalHash.toFixed(2)} {unit}
                           </span>
                         ) : (
                           <span className="text-xs text-slate-500">No online miners</span>
