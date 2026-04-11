@@ -334,6 +334,7 @@ function MobileMinerTable({
   sortDir,
   onSort,
   coinIconByDevice,
+  onRemove,
 }: {
   data: MobileMiner[];
   selectedDeviceIds: Set<string>;
@@ -343,6 +344,7 @@ function MobileMinerTable({
   sortDir: SortDir;
   onSort: (col: string) => void;
   coinIconByDevice: Record<string, string | null>;
+  onRemove?: (miner: MobileMiner) => void;
 }) {
   const statusBg = (miner: MobileMiner) => {
     const state = deriveOnlineState(miner);
@@ -470,6 +472,9 @@ function MobileMinerTable({
             <Th col="throttle" label="Throttle" />
             <Th col="status" label="Status" />
             <Th col="lastReport" label="Last Report" className="hidden xl:table-cell" />
+            <th className="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -561,6 +566,22 @@ function MobileMinerTable({
                 <td className="px-4 py-3 text-xs text-slate-400 hidden xl:table-cell">
                   {timeAgo(miner.lastReportTimestamp)}
                 </td>
+                <td className="px-4 py-3 text-right">
+                  {onRemove && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove(miner);
+                      }}
+                      title="Remove device"
+                      className="p-1 text-slate-500 hover:text-red-400 transition-colors rounded"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </td>
               </tr>
             );
           })}
@@ -590,6 +611,8 @@ export default function MobileMinerList() {
   // Removal modal state
   const [removeTarget, setRemoveTarget] = useState<MobileMiner | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [bulkRemoveTargets, setBulkRemoveTargets] = useState<MobileMiner[]>([]);
+  const [showBulkRemoveModal, setShowBulkRemoveModal] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem("mobile-miners-view-mode");
@@ -689,6 +712,56 @@ export default function MobileMinerList() {
     } finally {
       setRemoving(false);
     }
+  }
+
+  async function handleConfirmBulkRemove() {
+    if (bulkRemoveTargets.length === 0) return;
+    setRemoving(true);
+    try {
+      for (const miner of bulkRemoveTargets) {
+        const deviceId = miner.deviceId;
+        // Queue stop + set_config cleanup (best effort)
+        try {
+          await invoke("queue_mobile_command", {
+            deviceId,
+            commandType: "stop",
+            params: null,
+          });
+        } catch (err) {
+          console.warn(`Failed to queue stop for ${deviceId}:`, err);
+        }
+        try {
+          await invoke("queue_mobile_command", {
+            deviceId,
+            commandType: "set_config",
+            params: { poolUrl: "", wallet: "", worker: "", threads: 0 },
+          });
+        } catch (err) {
+          console.warn(`Failed to queue set_config for ${deviceId}:`, err);
+        }
+        try {
+          await invoke("remove_mobile_miner", { deviceId });
+        } catch (err) {
+          console.error(`Failed to remove ${deviceId}:`, err);
+        }
+      }
+      await fetchMiners();
+      setSelectedDeviceIds(new Set());
+      setBulkRemoveTargets([]);
+      setShowBulkRemoveModal(false);
+    } catch (err) {
+      console.error("Bulk remove failed:", err);
+      alert(`Failed to remove devices: ${err}`);
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  function openBulkRemoveModal() {
+    const targets = miners.filter((m) => selectedDeviceIds.has(m.deviceId));
+    if (targets.length === 0) return;
+    setBulkRemoveTargets(targets);
+    setShowBulkRemoveModal(true);
   }
 
   useEffect(() => {
@@ -1188,6 +1261,16 @@ export default function MobileMinerList() {
                       </svg>
                       Bulk Stop
                     </button>
+                    <button
+                      onClick={openBulkRemoveModal}
+                      disabled={removing}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/80 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Remove
+                    </button>
                   </>
                 )}
               </div>
@@ -1258,6 +1341,7 @@ export default function MobileMinerList() {
           sortDir={sortDir}
           onSort={handleSort}
           coinIconByDevice={coinIconByDevice}
+          onRemove={(m) => setRemoveTarget(m)}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -1321,6 +1405,58 @@ export default function MobileMinerList() {
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg"
               >
                 {removing ? "Removing..." : "Remove Device"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk remove confirmation modal */}
+      {showBulkRemoveModal && bulkRemoveTargets.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => !removing && setShowBulkRemoveModal(false)}
+          />
+          <div className="relative z-10 bg-dark-800 border border-red-900/40 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+            <h3 className="text-lg font-semibold text-white mb-3">
+              Remove {bulkRemoveTargets.length} mobile miner{bulkRemoveTargets.length > 1 ? "s" : ""}?
+            </h3>
+            <div className="text-sm text-slate-300 space-y-3 mb-5">
+              <p>Are you sure you want to remove the selected mobile miner{bulkRemoveTargets.length > 1 ? "s" : ""}?</p>
+              <p>For each device, this will:</p>
+              <ol className="list-decimal list-inside space-y-1 text-slate-400 text-xs">
+                <li>Queue a <code className="text-amber-400">stop</code> command</li>
+                <li>Queue a <code className="text-amber-400">set_config</code> command to clear pool URL, wallet, and worker</li>
+                <li>Remove the device from PoPManager's local registry</li>
+              </ol>
+              {bulkRemoveTargets.length <= 10 && (
+                <ul className="text-xs text-slate-400 bg-dark-900 rounded-lg p-3 space-y-1 max-h-40 overflow-y-auto">
+                  {bulkRemoveTargets.map((m) => (
+                    <li key={m.deviceId} className="font-mono">
+                      {m.name} <span className="text-slate-500">({m.deviceModel || m.deviceId.slice(0, 8)})</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-amber-400 text-xs border-l-2 border-amber-500/50 pl-3">
+                <strong>Note:</strong> Cleanup commands are only delivered if each device is online. Devices still configured to report to this PoPManager instance will re-register on their next report. To permanently remove them, first change or clear the server URL in each KASMobileMiner app.
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowBulkRemoveModal(false)}
+                disabled={removing}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmBulkRemove}
+                disabled={removing}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg"
+              >
+                {removing ? "Removing..." : `Remove ${bulkRemoveTargets.length} Device${bulkRemoveTargets.length > 1 ? "s" : ""}`}
               </button>
             </div>
           </div>
