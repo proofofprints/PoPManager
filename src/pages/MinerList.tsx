@@ -104,6 +104,7 @@ function MinerCard({
   onSelect,
   uptimeStats,
   coinIcon,
+  onRemove,
 }: {
   miner: MinerInfo;
   displayName: string;
@@ -113,6 +114,7 @@ function MinerCard({
   onSelect: () => void;
   uptimeStats?: UptimeStats;
   coinIcon?: string | null;
+  onRemove?: () => void;
 }) {
   const statusColor =
     {
@@ -211,6 +213,30 @@ function MinerCard({
               <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
               {miner.status}
             </span>
+            {onRemove && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+                title="Remove miner"
+                className="p-1.5 text-slate-500 hover:text-red-400 transition-colors rounded"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -279,6 +305,7 @@ function MinerTable({
   onSort,
   uptimeStats,
   coinIconByIp,
+  onRemove,
 }: {
   data: MinerWithSaved[];
   selectedIps: Set<string>;
@@ -289,6 +316,7 @@ function MinerTable({
   onSort: (col: string) => void;
   uptimeStats: Record<string, UptimeStats>;
   coinIconByIp?: Record<string, string | null>;
+  onRemove?: (ip: string) => void;
 }) {
   const statusBg = (status: string) =>
     ({
@@ -409,6 +437,9 @@ function MinerTable({
             <Th col="temp" label="Avg Temp" />
             <Th col="pool" label="Pool" className="hidden lg:table-cell" />
             <Th col="uptime" label="Uptime (24h)" className="hidden xl:table-cell" />
+            <th className="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -497,6 +528,22 @@ function MinerTable({
                     </span>
                   ) : "--"}
                 </td>
+                <td className="px-4 py-3 text-right">
+                  {onRemove && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove(info.ip);
+                      }}
+                      title="Remove miner"
+                      className="p-1 text-slate-500 hover:text-red-400 transition-colors rounded"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </td>
               </tr>
             );
           })}
@@ -557,6 +604,11 @@ export default function MinerList() {
     Record<string, { state: ApplyState; msg: string }>
   >({});
   const [bulkRunning, setBulkRunning] = useState(false);
+
+  // Remove miner(s) state
+  const [showRemoveModal, setShowRemoveModal] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [removeTargetIps, setRemoveTargetIps] = useState<string[]>([]);
 
   const [allUptimeStats, setAllUptimeStats] = useState<Record<string, UptimeStats>>({});
 
@@ -896,6 +948,47 @@ export default function MinerList() {
     setBulkRunning(false);
   }
 
+  // ── Remove miner(s) ─────────────────────────────────────────────────────────
+
+  function openRemoveModal(ips: string[]) {
+    setRemoveTargetIps(ips);
+    setShowRemoveModal(true);
+  }
+
+  function closeRemoveModal() {
+    if (removing) return;
+    setShowRemoveModal(false);
+    setRemoveTargetIps([]);
+  }
+
+  async function handleConfirmRemove() {
+    if (removeTargetIps.length === 0) return;
+    setRemoving(true);
+    try {
+      let updated: SavedMiner[] = savedMiners;
+      for (const ip of removeTargetIps) {
+        try {
+          updated = await invoke<SavedMiner[]>("remove_miner", { ip });
+        } catch (err) {
+          console.error(`Failed to remove ${ip}:`, err);
+        }
+      }
+      setSavedMiners(updated);
+      // Rebuild minerData from the new savedMiners list
+      setMinerData((prev) => prev.filter((d) => updated.some((s) => s.ip === d.info.ip)));
+      setSelectedIps(new Set());
+      setShowRemoveModal(false);
+      setRemoveTargetIps([]);
+      // Trigger a fresh poll so statuses are accurate
+      fetchAllStatuses(updated);
+    } catch (err) {
+      console.error("Bulk remove failed:", err);
+      alert(`Failed to remove miners: ${err}`);
+    } finally {
+      setRemoving(false);
+    }
+  }
+
   const bulkDone = !bulkRunning && Object.keys(applyResults).length > 0;
   const effectiveSelectionMode = viewMode === "grid" ? true : selectionMode;
 
@@ -1194,6 +1287,15 @@ export default function MinerList() {
                       </svg>
                       Apply Pool Profile
                     </button>
+                    <button
+                      onClick={() => openRemoveModal(Array.from(selectedIps))}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Remove
+                    </button>
                     {poolProfiles.length === 0 && (
                       <span className="text-xs text-slate-500">
                         (No profiles — go to Settings to create one)
@@ -1249,6 +1351,7 @@ export default function MinerList() {
           onSort={handleSort}
           uptimeStats={allUptimeStats}
           coinIconByIp={coinIconByIp}
+          onRemove={(ip) => openRemoveModal([ip])}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -1263,6 +1366,7 @@ export default function MinerList() {
               onSelect={() => toggleSelect(d.info.ip)}
               uptimeStats={allUptimeStats[d.info.ip]}
               coinIcon={coinIconByIp[d.info.ip]}
+              onRemove={() => openRemoveModal([d.info.ip])}
             />
           ))}
         </div>
@@ -1410,6 +1514,61 @@ export default function MinerList() {
                   Cancel
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Miner(s) Confirmation Modal */}
+      {showRemoveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={closeRemoveModal}
+          />
+          <div className="relative z-10 bg-dark-800 border border-red-900/40 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+            <h3 className="text-lg font-semibold text-white mb-3">
+              Remove {removeTargetIps.length === 1 ? "this miner" : `${removeTargetIps.length} miners`}?
+            </h3>
+            <div className="text-sm text-slate-300 space-y-3 mb-5">
+              <p>Are you sure you want to remove the selected miner{removeTargetIps.length > 1 ? "s" : ""} from PoPManager?</p>
+              {removeTargetIps.length <= 10 && (
+                <ul className="text-xs text-slate-400 bg-dark-900 rounded-lg p-3 space-y-1 max-h-40 overflow-y-auto">
+                  {removeTargetIps.map((ip) => {
+                    const entry = minerData.find((d) => d.info.ip === ip);
+                    const name = entry ? resolveDisplayName(entry.info, entry.saved) : ip;
+                    return (
+                      <li key={ip} className="font-mono">
+                        {name} <span className="text-slate-500">({ip})</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {removeTargetIps.length > 10 && (
+                <p className="text-xs text-slate-500">
+                  ({removeTargetIps.length} miners will be removed)
+                </p>
+              )}
+              <p className="text-amber-400 text-xs border-l-2 border-amber-500/50 pl-3">
+                This only removes the miners from PoPManager's monitoring list. The physical miners themselves are not affected and will continue mining. You can re-add them later via Add Device.
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={closeRemoveModal}
+                disabled={removing}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRemove}
+                disabled={removing}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg"
+              >
+                {removing ? "Removing..." : `Remove ${removeTargetIps.length === 1 ? "Miner" : `${removeTargetIps.length} Miners`}`}
+              </button>
             </div>
           </div>
         </div>
