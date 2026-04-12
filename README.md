@@ -78,10 +78,16 @@ PoPManager is a free, open-source desktop application for monitoring and managin
 
 ## Installation
 
-### Windows
-1. Download the latest `.msi` installer from [Releases](https://github.com/proofofprints/PoPManager/releases)
-2. Run the installer and follow the prompts
-3. Launch PoPManager from the Start Menu
+Download the latest installer for your platform from [Releases](https://github.com/proofofprints/PoPManager/releases):
+
+| Platform | Format | Notes |
+|---|---|---|
+| **Windows** (x64) | `.msi` installer | Fully tested. See [First Launch on Windows](#first-launch-on-windows). |
+| **macOS** (Apple Silicon) | `.dmg` (aarch64) | Community-tested. |
+| **macOS** (Intel) | `.dmg` (x64) | Community-tested. |
+| **Linux** (x64) | `.deb` or `.AppImage` | Community-tested. Requires `webkit2gtk 4.1` and related system libraries. |
+
+> **Note:** Windows is the primary development and testing platform. macOS and Linux builds are provided and should work, but have not been as extensively tested. Please [open an issue](https://github.com/proofofprints/PoPManager/issues) if you encounter platform-specific problems.
 
 ### Building from Source
 Prerequisites:
