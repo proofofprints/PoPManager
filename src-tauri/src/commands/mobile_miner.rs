@@ -90,7 +90,7 @@ pub struct MobileServerConfig {
 }
 
 fn default_enabled() -> bool {
-    true
+    false
 }
 fn default_port() -> u16 {
     8787
@@ -105,7 +105,7 @@ fn default_report_interval() -> u32 {
 impl Default for MobileServerConfig {
     fn default() -> Self {
         MobileServerConfig {
-            enabled: true,
+            enabled: false,
             port: 8787,
             require_api_key: true,
             report_interval_seconds: 30,

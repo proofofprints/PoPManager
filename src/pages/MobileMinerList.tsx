@@ -611,8 +611,10 @@ export default function MobileMinerList() {
   // Removal modal state
   const [removeTarget, setRemoveTarget] = useState<MobileMiner | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const [bulkRemoveTargets, setBulkRemoveTargets] = useState<MobileMiner[]>([]);
   const [showBulkRemoveModal, setShowBulkRemoveModal] = useState(false);
+  const [bulkRemoveError, setBulkRemoveError] = useState<string | null>(null);
 
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem("mobile-miners-view-mode");
@@ -708,7 +710,7 @@ export default function MobileMinerList() {
       setRemoveTarget(null);
     } catch (err) {
       console.error("Failed to remove device:", err);
-      alert(`Failed to remove device: ${err}`);
+      setRemoveError(String(err));
     } finally {
       setRemoving(false);
     }
@@ -751,7 +753,7 @@ export default function MobileMinerList() {
       setShowBulkRemoveModal(false);
     } catch (err) {
       console.error("Bulk remove failed:", err);
-      alert(`Failed to remove devices: ${err}`);
+      setBulkRemoveError(String(err));
     } finally {
       setRemoving(false);
     }
@@ -761,6 +763,7 @@ export default function MobileMinerList() {
     const targets = miners.filter((m) => selectedDeviceIds.has(m.deviceId));
     if (targets.length === 0) return;
     setBulkRemoveTargets(targets);
+    setBulkRemoveError(null);
     setShowBulkRemoveModal(true);
   }
 
@@ -1341,7 +1344,7 @@ export default function MobileMinerList() {
           sortDir={sortDir}
           onSort={handleSort}
           coinIconByDevice={coinIconByDevice}
-          onRemove={(m) => setRemoveTarget(m)}
+          onRemove={(m) => { setRemoveError(null); setRemoveTarget(m); }}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -1355,7 +1358,7 @@ export default function MobileMinerList() {
               selectionMode={selectionMode}
               selected={selectedDeviceIds.has(m.deviceId)}
               onSelect={() => toggleSelect(m.deviceId)}
-              onRemove={() => setRemoveTarget(m)}
+              onRemove={() => { setRemoveError(null); setRemoveTarget(m); }}
               history={historyRef.current.get(m.deviceId) ?? []}
               coinIcon={coinIconByDevice[m.deviceId]}
             />
@@ -1368,7 +1371,7 @@ export default function MobileMinerList() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => !removing && setRemoveTarget(null)}
+            onClick={() => { if (!removing) { setRemoveTarget(null); setRemoveError(null); } }}
           />
           <div className="relative z-10 bg-dark-800 border border-red-900/40 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
             <h3 className="text-lg font-semibold text-white mb-3">
@@ -1391,9 +1394,14 @@ export default function MobileMinerList() {
                 on its next report. To permanently remove it, first change or clear the server URL in the KASMobileMiner app.
               </p>
             </div>
+            {removeError && (
+              <div className="mb-4 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">
+                {removeError}
+              </div>
+            )}
             <div className="flex gap-2 justify-end">
               <button
-                onClick={() => setRemoveTarget(null)}
+                onClick={() => { setRemoveTarget(null); setRemoveError(null); }}
                 disabled={removing}
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm rounded-lg"
               >
@@ -1416,7 +1424,7 @@ export default function MobileMinerList() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => !removing && setShowBulkRemoveModal(false)}
+            onClick={() => { if (!removing) { setShowBulkRemoveModal(false); setBulkRemoveError(null); } }}
           />
           <div className="relative z-10 bg-dark-800 border border-red-900/40 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
             <h3 className="text-lg font-semibold text-white mb-3">
@@ -1443,9 +1451,14 @@ export default function MobileMinerList() {
                 <strong>Note:</strong> Cleanup commands are only delivered if each device is online. Devices still configured to report to this PoPManager instance will re-register on their next report. To permanently remove them, first change or clear the server URL in each KASMobileMiner app.
               </p>
             </div>
+            {bulkRemoveError && (
+              <div className="mb-4 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">
+                {bulkRemoveError}
+              </div>
+            )}
             <div className="flex gap-2 justify-end">
               <button
-                onClick={() => setShowBulkRemoveModal(false)}
+                onClick={() => { setShowBulkRemoveModal(false); setBulkRemoveError(null); }}
                 disabled={removing}
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm rounded-lg"
               >

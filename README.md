@@ -103,12 +103,26 @@ npm run tauri build
 
 ## Quick Start
 
-1. **Launch PoPManager** and navigate to the **Monitoring** tab
-2. Click **Scan Network** — PoPManager will automatically find miners on your local network
-3. Select discovered miners and click **Add to Monitored**
-4. Go to **Pools** to create a pool profile with your pool address and wallet
-5. Apply the pool profile to your miners
-6. Check the **Dashboard** for your farm overview and profitability estimates
+### ASIC Miners
+1. **Launch PoPManager** and open the **ASIC Miners** tab in the sidebar
+2. Click **Add Device** to open the discovery panel
+3. Click **Scan Network** — PoPManager will auto-detect your local subnet and find supported miners
+4. Select the miners you want to monitor and click **Add to Monitored**
+5. Go to **Pools** to create a pool profile with your pool address and wallet
+6. Select miners on the ASIC Miners page and click **Apply Pool Profile** to push the config
+7. Check the **Dashboard** for your farm overview and profitability estimates
+
+### Mobile Miners (KASMobileMiner Android app)
+1. Open the **Mobile Miners** tab and click **Add Device** to reveal the pairing code
+2. In KASMobileMiner, enter the server URL shown (e.g. `http://192.168.1.50:8787`) and the 6-digit pairing code
+3. Once paired, the device will appear in the Mobile Miners list and begin reporting telemetry
+4. Use the **Push to Mobile Miners** action on any Pool profile to configure mobile devices remotely
+
+## First Launch on Windows
+
+**SmartScreen warning:** Because PoPManager v1 is distributed without an Authenticode code-signing certificate, Windows SmartScreen will display an "unrecognized app" warning the first time you run the installer. This is expected. Click **More info** on the warning dialog, then **Run anyway** to proceed. Subsequent launches will not show the warning on the same machine. Code signing is planned for a future release.
+
+**Firewall prompt:** PoPManager can run an embedded HTTP server on port 8787 for mobile miner telemetry. The server is **disabled by default** — enable it in **Settings → Mobile Miner Server** if you plan to use the KASMobileMiner Android app. When enabled, Windows Defender Firewall will prompt you to allow PoPManager to accept incoming connections on that port.
 
 ## Adding New Coins
 
@@ -120,10 +134,26 @@ See [docs/SUPPORTED_MINERS.md](docs/SUPPORTED_MINERS.md) for the full list of su
 
 ## Configuration
 
-All configuration is stored locally in your app data directory:
-- **Windows:** `%APPDATA%/com.proofofprints.popmanager/`
-- **Linux:** `~/.config/com.proofofprints.popmanager/`
-- **macOS:** `~/Library/Application Support/com.proofofprints.popmanager/`
+All configuration is stored locally on your machine. On Windows, data is split across two locations:
+
+**App data (`%LOCALAPPDATA%\PoPManager\`)** — most operational state:
+- `miners.json` — saved ASIC miners
+- `mobile_miners.json` — registered mobile miners
+- `mobile_miner_commands.json` — pending remote commands
+- `mobile_server_config.json` — mobile server settings + pairing code
+- `alert_rules.json`, `alert_history.json` — alert configuration and history
+- `pool_profiles.json` — pool profiles
+- `coins.json` — configured cryptocurrencies
+- `smtp_config.json` — email notification settings
+
+**User data (`%APPDATA%\com.proofofprints.popmanager\`)** — preferences and time-series:
+- `preferences.json` — currency, pool fee, electricity cost, log level, etc.
+- `history.json` — farm hashrate snapshots
+- `uptime.json` — per-miner uptime tracking
+
+To fully back up your PoPManager setup, copy both directories. Logs live in `%APPDATA%\com.proofofprints.popmanager\logs\popmanager.log`.
+
+On Linux and macOS the layout follows each platform's XDG/Application Support conventions automatically.
 
 ## Disclaimer
 
