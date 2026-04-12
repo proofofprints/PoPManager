@@ -46,10 +46,9 @@ PoPManager includes an embedded HTTP server that receives push-based telemetry f
 - **Mobile-specific alerts** — battery low, CPU temperature high, thermal throttle, device offline
 - **Device removal** — queue cleanup commands (stop mining + clear config) before removing a device, with a confirmation prompt explaining the process
 
-<!-- Screenshots for mobile miner screens — replace these placeholders with actual screenshots -->
-<!-- ![Mobile Miners Card View](docs/screenshots/Mobile%20Miners%20Card.png) -->
-<!-- ![Mobile Miner Remote Control](docs/screenshots/Mobile%20Miner%20Detail.png) -->
-<!-- ![Pairing Code Panel](docs/screenshots/Pairing%20Code.png) -->
+![Mobile Miners Card View](docs/screenshots/Mobile%20Miner%20Card.png)
+![Mobile Miners Grid View](docs/screenshots/Mobile%20Miner%20Grid.png)
+![Mobile Miner Remote Control](docs/screenshots/Mobile%20Detail.png)
 
 ### Multi-Coin Support
 - Built-in support for **Kaspa (KAS)** and **Bitcoin (BTC)**
@@ -99,6 +98,8 @@ PoPManager includes an embedded HTTP server that receives push-based telemetry f
 - **Unified miner view** — see both ASIC and mobile miners connected to each pool, with slot indicators (Primary / Backup 1 / Backup 2)
 - **Push to Mobile Miners** — select mobile devices and queue a pool configuration change directly from the pool detail page
 - Bulk apply pool configurations to ASIC miners
+
+![Pool Detail View](docs/screenshots/Pool%20View.png)
 
 ### Data & Export
 - CSV export: miner list, alert history, profitability reports, farm history

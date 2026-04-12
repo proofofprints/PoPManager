@@ -96,6 +96,7 @@ export default function Dashboard() {
   const [coins, setCoins] = useState<CoinConfig[]>([]);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [initialLoaded, setInitialLoaded] = useState(false);
   const [coinEarnings, setCoinEarnings] = useState<Record<string, CoinEarnings>>({});
   const [coinViewMode, setCoinViewMode] = useState<CoinViewMode>(() => {
     const saved = localStorage.getItem("dashboard-coin-view");
@@ -281,9 +282,10 @@ export default function Dashboard() {
     invoke<SavedMiner[]>("get_saved_miners")
       .then((saved) => {
         setSavedMiners(saved);
+        setInitialLoaded(true);
         fetchAllStatuses(saved);
       })
-      .catch(console.error);
+      .catch(() => setInitialLoaded(true));
     invoke<CoinConfig[]>("get_coins").then(setCoins).catch(console.error);
     invoke<FarmSnapshot[]>("get_farm_history", { hours: 720 })
       .then(setFarmHistory)
@@ -486,7 +488,17 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {totalCount === 0 && mobileCount === 0 ? (
+      {!initialLoaded ? (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <svg className="w-8 h-8 mx-auto mb-3 text-slate-500 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <p className="text-sm text-slate-500">Loading miners...</p>
+          </div>
+        </div>
+      ) : totalCount === 0 && mobileCount === 0 ? (
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="bg-dark-800 rounded-2xl border border-slate-700/50 p-10 max-w-lg text-center">
             <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-primary-500/10 border border-primary-500/30 flex items-center justify-center">
