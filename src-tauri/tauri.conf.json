@@ -26,7 +26,7 @@
   "plugins": {
     "updater": {
       "endpoints": ["https://github.com/proofofprints/PoPManager/releases/latest/download/latest.json"],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5Q0ZlWVdSUnkxanpHeTdRSkJtOVNhWGR4NjBSK2szRWZlTkxvNzZKMjdDWUFBQkFBQUFBQUFBQUFBQUlBQUFBQVBzakZ4VzBBZ3VmZ2hTbmp6bVJSZ0dRWlFmRzBZeHcvazJRRERXZDZrYlR2eEJ1YW40dExwVzJnYzZPTUYzT2hRcS9CRnhhdTNrSDJMUmE2OWpBNmp1MWVOR000NjhsVC9ZVW5YblRsbTQ3cm1DSnljVGtQVW52NURqUFRLR2RLUDBldlFLSmFpa1U9Cg=="
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZDOUQwRDJGREM2RDUwNjQKUldSa1VHM2NMdzJkYkYxMFJEQ2RhN0JyMTFGTkk2TlM2czNxUXNCYSsvSGpNZ1gvVUp4a2lzZ0kK"
     }
   },
   "bundle": {
