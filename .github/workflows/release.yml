@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ''
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build with Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: PoPManager ${{ github.ref_name }}
+          releaseBody: |
+            See the [full changelog](https://github.com/proofofprints/PoPManager/compare/v0.1.0...${{ github.ref_name }}) for all changes in this release.
+
+            ## Installation
+
+            | Platform | Download |
+            |---|---|
+            | **Windows** (x64) | `.msi` installer |
+            | **macOS** (Apple Silicon) | `.dmg` (aarch64) |
+            | **macOS** (Intel) | `.dmg` (x64) |
+            | **Linux** (x64) | `.deb` or `.AppImage` |
+
+            ### Windows first-launch notes
+            - **SmartScreen warning:** PoPManager is not yet code-signed. Click "More info" → "Run anyway" on the SmartScreen dialog.
+            - **Firewall prompt:** If you enable the mobile miner server (Settings → Mobile Miner Server), Windows will prompt to allow connections on port 8787.
+
+            > **Note:** Only Windows has been extensively tested. macOS and Linux builds are provided as-is — please report any platform-specific issues.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
