@@ -19,7 +19,7 @@ export default function PairingCodePanel({
   onClose,
   pollIntervalMs = 3000,
   title = "Pair a New Device",
-  subtitle = "In the KASMobileMiner app, enter these values to register your device.",
+  subtitle = "In the PoPMiner Mobile app, enter these values to register your device.",
 }: PairingCodePanelProps) {
   const [code, setCode] = useState<string>("");
   const [copiedUrl, setCopiedUrl] = useState(false);

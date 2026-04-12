@@ -391,7 +391,7 @@ export default function MobileMinerDetail() {
               <p className="text-amber-400 text-xs border-l-2 border-amber-500/50 pl-3">
                 <strong>Note:</strong> The cleanup commands are only delivered if the device is currently online.
                 If the device is still configured to report to this PoPManager instance, it will re-register automatically
-                on its next report. To permanently remove it, first change or clear the server URL in the KASMobileMiner app.
+                on its next report. To permanently remove it, first change or clear the server URL in the PoPMiner Mobile app.
               </p>
             </div>
             {removeError && (
