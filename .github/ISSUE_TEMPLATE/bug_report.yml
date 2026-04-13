@@ -1,0 +1,80 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill out the sections below so we can reproduce and fix the issue.
+
+  - type: input
+    id: version
+    attributes:
+      label: PoPManager version
+      description: "Settings → About → Current Version"
+      placeholder: "v1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 10
+        - Windows 11
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (Ubuntu/Debian)
+        - Linux (Other)
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly. What did you see?
+      placeholder: "When I click 'Scan Network', the app shows an error..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: "I expected the scan to find my miners on the local network."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we trigger this bug?
+      placeholder: |
+        1. Go to ASIC Miners
+        2. Click Add Device
+        3. Click Scan Network
+        4. See error
+    validations:
+      required: true
+
+  - type: input
+    id: miner-model
+    attributes:
+      label: Miner model (if relevant)
+      placeholder: "Iceriver KS0 Pro, Antminer S19, etc."
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: "Paste relevant lines from Settings → Troubleshooting → Open Log Directory → popmanager.log"
+      render: text
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag and drop any screenshots that help illustrate the issue.
