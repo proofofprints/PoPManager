@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PoPManager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.proofofprints.popmanager",
   "build": {
     "frontendDist": "../dist",
@@ -26,7 +26,7 @@
   "plugins": {
     "updater": {
       "endpoints": ["https://github.com/proofofprints/PoPManager/releases/latest/download/latest.json"],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZDOUQwRDJGREM2RDUwNjQKUldSa1VHM2NMdzJkYkYxMFJEQ2RhN0JyMTFGTkk2TlM2czNxUXNCYSsvSGpNZ1gvVUp4a2lzZ0kK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY2N0MzODRGQUE5QzhFMDQKUldRRWpweXFUemg4OWlOMGdxeUZ0cmxqbWMremUrTnI2ZlRsbCtWR1I3LzdCckJBUFZHZGN0UTAK"
     }
   },
   "bundle": {
