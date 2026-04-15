@@ -359,8 +359,10 @@ pub fn check_alerts(miners: Vec<MinerSnapshot>) -> Result<Vec<AlertEvent>, Strin
         // Update share tracker
         if miner.online {
             let entry = share_tracker.entry(miner.ip.clone()).or_insert((miner.accepted_shares, now_instant));
-            if miner.accepted_shares > entry.0 {
-                // Shares increased — reset timer
+            if miner.accepted_shares != entry.0 {
+                // Shares changed — either increased (normal mining) or decreased
+                // (miner restarted, counter reset to 0). Either way, reset the
+                // timer. Only fire NoShares when the count is truly stuck.
                 *entry = (miner.accepted_shares, now_instant);
             }
         }
