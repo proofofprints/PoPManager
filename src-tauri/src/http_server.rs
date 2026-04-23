@@ -513,8 +513,23 @@ pub async fn start_server(
 
     match tokio::net::TcpListener::bind(&addr).await {
         Ok(listener) => {
+            // Start mDNS advertisement so the Android companion app can
+            // discover PoPManager on the LAN automatically.
+            let mdns_daemon = match crate::mdns::register(port) {
+                Ok(daemon) => Some(daemon),
+                Err(e) => {
+                    log::warn!("mDNS advertisement failed (server will still work): {}", e);
+                    None
+                }
+            };
+
             if let Err(e) = axum::serve(listener, router).await {
                 log::warn!("Mobile miner HTTP server error: {}", e);
+            }
+
+            // Stop mDNS advertisement when the server stops.
+            if let Some(daemon) = mdns_daemon {
+                crate::mdns::unregister(daemon);
             }
         }
         Err(e) => {

@@ -1,5 +1,6 @@
 mod commands;
 mod http_server;
+mod mdns;
 
 use tauri::Manager;
 use tauri::menu::{Menu, MenuItem};
