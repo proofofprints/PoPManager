@@ -60,7 +60,7 @@ export default function AsicAddDevicePanel({ onClose, onMinersAdded }: AsicAddDe
       const updated = await invoke<SavedMiner[]>("add_miner", {
         ip,
         label: addLabel.trim() || null,
-        coinId: "other",
+        coinId: "kaspa",
         wattage: addWattage,
         manufacturer: info.manufacturer || null,
       });
@@ -84,7 +84,7 @@ export default function AsicAddDevicePanel({ onClose, onMinersAdded }: AsicAddDe
     if (!ips.length) return;
     try {
       const manufacturers = ips.map((ip) => scannedMiners.find((m) => m.ip === ip)?.manufacturer ?? "");
-      const updated = await invoke<SavedMiner[]>("import_from_scan", { ips, manufacturers, coinId: "other" });
+      const updated = await invoke<SavedMiner[]>("import_from_scan", { ips, manufacturers, coinId: "kaspa" });
       setSavedMiners(updated);
       setSelectedIps(new Set());
       // Update wattages for newly imported miners from scan data
