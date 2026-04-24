@@ -145,7 +145,7 @@ export default function PairingCodePanel({
               />
             </div>
             <p className="text-xs text-slate-500">
-              Scan with PoPMiner Mobile to auto-fill server URL and pairing code
+              Scan with PoPMobile to auto-fill server URL and pairing code
             </p>
           </div>
         )}
