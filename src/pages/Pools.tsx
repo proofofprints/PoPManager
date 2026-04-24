@@ -79,6 +79,22 @@ function extractHostname(addr: string): string {
   }
 }
 
+/** Extract hostname:port from a pool address for matching.
+ *  e.g. "stratum+tcp://pool.example.com:5559" → "pool.example.com:5559"
+ *  Falls back to extractHostname if port can't be parsed. */
+function extractHostPort(addr: string): string {
+  if (!addr) return "";
+  try {
+    const withProtocol = addr.includes("://") ? addr : "tcp://" + addr;
+    const url = new URL(withProtocol);
+    return url.port ? `${url.hostname}:${url.port}` : url.hostname;
+  } catch {
+    // Fallback: strip protocol prefix and return what's left
+    const stripped = addr.replace(/^[a-z+]+:\/\//, "");
+    return stripped || addr;
+  }
+}
+
 function truncateAddr(addr: string, max = 40): string {
   if (!addr) return "—";
   if (addr.length <= max) return addr;
@@ -346,12 +362,12 @@ export default function Pools() {
   }
 
   function getMinersForProfile(profile: PoolProfile): PoolMinerMatch[] {
-    const slots: { slot: 1 | 2 | 3; hostname: string }[] = ([1, 2, 3] as const)
+    const slots: { slot: 1 | 2 | 3; hostport: string }[] = ([1, 2, 3] as const)
       .map((n) => ({
         slot: n,
-        hostname: extractHostname(profile[`pool${n}addr` as keyof PoolProfile] as string),
+        hostport: extractHostPort(profile[`pool${n}addr` as keyof PoolProfile] as string),
       }))
-      .filter((s) => s.hostname);
+      .filter((s) => s.hostport);
 
     if (slots.length === 0) return [];
 
@@ -363,9 +379,9 @@ export default function Pools() {
       if (!info) continue;
       const activePool = info.pools.find((p) => p.connect) ?? info.pools[0];
       if (!activePool) continue;
-      const minerHost = extractHostname(activePool.addr);
-      if (!minerHost) continue;
-      const matched = slots.find((s) => s.hostname === minerHost);
+      const minerHostPort = extractHostPort(activePool.addr);
+      if (!minerHostPort) continue;
+      const matched = slots.find((s) => s.hostport === minerHostPort);
       if (!matched) continue;
 
       const label =
@@ -391,9 +407,9 @@ export default function Pools() {
     // Mobile matches
     for (const m of mobileMiners) {
       if (!m.pool) continue;
-      const minerHost = extractHostname(m.pool);
-      if (!minerHost) continue;
-      const matched = slots.find((s) => s.hostname === minerHost);
+      const minerHostPort = extractHostPort(m.pool);
+      if (!minerHostPort) continue;
+      const matched = slots.find((s) => s.hostport === minerHostPort);
       if (!matched) continue;
 
       matches.push({
@@ -815,9 +831,9 @@ export default function Pools() {
                     mobileMiners.map((m) => {
                       const isSelected = pushSelectedIds.has(m.deviceId);
                       const result = pushResults[m.deviceId];
-                      const currentPoolHost = extractHostname(m.pool);
-                      const profileHost = extractHostname(selectedProfile.pool1addr);
-                      const alreadyOnPool = currentPoolHost && currentPoolHost === profileHost;
+                      const currentPoolHostPort = extractHostPort(m.pool);
+                      const profileHostPort = extractHostPort(selectedProfile.pool1addr);
+                      const alreadyOnPool = currentPoolHostPort && currentPoolHostPort === profileHostPort;
 
                       return (
                         <label

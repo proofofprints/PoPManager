@@ -245,7 +245,7 @@ fn default_rules() -> Vec<AlertRule> {
             name: "Mobile CPU Hot".to_string(),
             enabled: true,
             rule_type: RuleType::MobileCpuTempAbove,
-            threshold: 65.0,
+            threshold: 85.0,
             applies_to: vec![],
             notify_desktop: true,
             notify_email: true,

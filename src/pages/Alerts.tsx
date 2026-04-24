@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import type { AlertEvent, AlertRule, RuleType } from "../types/alerts";
-import type { SavedMiner } from "../types/miner";
+import type { SavedMiner, MobileMiner } from "../types/miner";
 import { useAlerts } from "../context/AlertContext";
 
 // ─── Alert Rules helpers ──────────────────────────────────────────────────────
@@ -41,6 +41,10 @@ function thresholdLabel(ruleType: RuleType): string {
 }
 
 
+function isMobileRuleType(ruleType: RuleType): boolean {
+  return ruleType === "MobileBatteryLow" || ruleType === "MobileCpuTempAbove" || ruleType === "MobileThrottle" || ruleType === "MobileOffline";
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 type Tab = "history" | "rules";
@@ -62,6 +66,7 @@ export default function Alerts() {
   // Rules state
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [savedMiners, setSavedMiners] = useState<SavedMiner[]>([]);
+  const [mobileMiners, setMobileMiners] = useState<MobileMiner[]>([]);
   const [showRuleForm, setShowRuleForm] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [ruleForm, setRuleForm] = useState<Omit<AlertRule, "id">>(EMPTY_RULE);
@@ -85,6 +90,7 @@ export default function Alerts() {
     loadHistory();
     invoke<AlertRule[]>("get_alert_rules").then(setRules).catch(console.error);
     invoke<SavedMiner[]>("get_saved_miners").then(setSavedMiners).catch(console.error);
+    invoke<MobileMiner[]>("get_mobile_miners").then(setMobileMiners).catch(console.error);
   }, [loadHistory]);
 
   async function handleAcknowledge(id: string) {
@@ -603,14 +609,20 @@ export default function Alerts() {
                     }
                     className="w-full bg-dark-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500 h-20"
                   >
-                    {savedMiners.map((m) => (
-                      <option key={m.ip} value={m.ip}>
-                        {m.label || m.ip}
-                      </option>
-                    ))}
+                    {isMobileRuleType(ruleForm.ruleType)
+                      ? mobileMiners.map((m) => (
+                          <option key={m.deviceId} value={m.deviceId}>
+                            {m.name || m.deviceId.slice(0, 8)}
+                          </option>
+                        ))
+                      : savedMiners.map((m) => (
+                          <option key={m.ip} value={m.ip}>
+                            {m.label || m.ip}
+                          </option>
+                        ))}
                   </select>
                   <p className="text-xs text-slate-500 mt-1">
-                    Hold Ctrl/Cmd to select multiple. Leave empty for all miners.
+                    Hold Ctrl/Cmd to select multiple. Leave empty for all {isMobileRuleType(ruleForm.ruleType) ? "mobile devices" : "miners"}.
                   </p>
                 </div>
 
