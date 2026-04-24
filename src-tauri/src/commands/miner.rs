@@ -52,7 +52,7 @@ struct IceriverData {
     #[serde(default)]
     unit: String,
     #[serde(default)]
-    pows: HashMap<String, Vec<u32>>,
+    pows: HashMap<String, Vec<i32>>,
     #[serde(default)]
     pows_x: Vec<String>,
     #[serde(default)]
@@ -358,13 +358,23 @@ pub async fn fetch_iceriver_info(ip: String) -> Result<MinerInfo, String> {
     // Build hashrate history from pows map + labels
     let mut hashrate_history = Vec::new();
     let labels = d.pows_x.clone();
-    let mut pows_sorted: Vec<(String, Vec<u32>)> = d.pows.into_iter().collect();
+    let mut pows_sorted: Vec<(String, Vec<i32>)> = d.pows.into_iter().collect();
     pows_sorted.sort_by_key(|(k, _)| k.clone());
-    for (board_name, values) in pows_sorted {
+    for (board_name, raw_values) in pows_sorted {
+        // Pair values with labels, filter out -1 sentinel values (unfilled
+        // history slots from miners that haven't been running long enough),
+        // and convert the remaining values to u32.
+        let paired: Vec<(u32, String)> = raw_values
+            .into_iter()
+            .zip(labels.iter().cloned())
+            .filter(|(v, _)| *v >= 0)
+            .map(|(v, l)| (v as u32, l))
+            .collect();
+        let (clean_values, clean_labels): (Vec<u32>, Vec<String>) = paired.into_iter().unzip();
         hashrate_history.push(HashrateHistory {
             board: board_name,
-            values,
-            labels: labels.clone(),
+            values: clean_values,
+            labels: clean_labels,
         });
     }
 
