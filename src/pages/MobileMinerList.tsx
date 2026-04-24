@@ -1304,7 +1304,7 @@ export default function MobileMinerList() {
             No mobile miners registered yet
           </p>
           <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
-            Install PoPMiner Mobile on your Android device and point it to this PoPManager
+            Install PoPMobile on your Android device and point it to this PoPManager
             instance:
           </p>
           {serverUrl && (
@@ -1391,7 +1391,7 @@ export default function MobileMinerList() {
               <p className="text-amber-400 text-xs border-l-2 border-amber-500/50 pl-3">
                 <strong>Note:</strong> The cleanup commands are only delivered if the device is currently online.
                 If the device is still configured to report to this PoPManager instance, it will re-register automatically
-                on its next report. To permanently remove it, first change or clear the server URL in the PoPMiner Mobile app.
+                on its next report. To permanently remove it, first change or clear the server URL in the PoPMobile app.
               </p>
             </div>
             {removeError && (
@@ -1448,7 +1448,7 @@ export default function MobileMinerList() {
                 </ul>
               )}
               <p className="text-amber-400 text-xs border-l-2 border-amber-500/50 pl-3">
-                <strong>Note:</strong> Cleanup commands are only delivered if each device is online. Devices still configured to report to this PoPManager instance will re-register on their next report. To permanently remove them, first change or clear the server URL in each PoPMiner Mobile app.
+                <strong>Note:</strong> Cleanup commands are only delivered if each device is online. Devices still configured to report to this PoPManager instance will re-register on their next report. To permanently remove them, first change or clear the server URL in each PoPMobile app.
               </p>
             </div>
             {bulkRemoveError && (

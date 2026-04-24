@@ -622,7 +622,7 @@ export default function Settings() {
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-white">Mobile Miner Server</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Allow PoPMiner Mobile Android app to push telemetry to PoPManager over HTTP.
+              Allow PoPMobile Android app to push telemetry to PoPManager over HTTP.
             </p>
           </div>
           <div className="space-y-4">
@@ -715,7 +715,7 @@ export default function Settings() {
                 <PairingCodePanel
                   serverUrl={mobileServerUrl}
                   title="Device Pairing"
-                  subtitle="Use this code in the PoPMiner Mobile app to register a new device."
+                  subtitle="Use this code in the PoPMobile app to register a new device."
                 />
               </div>
             )}

@@ -8,7 +8,7 @@ Built by [Proof of Prints](https://proofofprints.com) | [Support: support@proofo
 
 PoPManager is a free, open-source desktop application for monitoring and managing your cryptocurrency mining operation. Built with Tauri (Rust + React), it runs on Windows, Linux, and macOS without requiring a dedicated mining OS.
 
-Manage ASIC miners on your local network *and* mobile miners running **PoPMiner Mobile** *(coming soon)* on Android — all from one unified dashboard. Monitor hashrates, temperatures, battery levels, profitability, and manage pool configurations across your entire fleet.
+Manage ASIC miners on your local network *and* mobile miners running **PoPMobile** *(coming soon)* on Android — all from one unified dashboard. Monitor hashrates, temperatures, battery levels, profitability, and manage pool configurations across your entire fleet.
 
 ## Screenshots
 
@@ -34,7 +34,7 @@ Manage ASIC miners on your local network *and* mobile miners running **PoPMiner 
 
 ### Mobile Miner Management
 
-PoPManager includes an embedded HTTP server that receives push-based telemetry from mobile miners running **PoPMiner Mobile** *(coming soon)* on Android. Mobile miners pair with a single-use 6-digit pairing code and then report telemetry every 30 seconds over your local network.
+PoPManager includes an embedded HTTP server that receives push-based telemetry from mobile miners running **PoPMobile** *(coming soon)* on Android. Mobile miners pair with a single-use 6-digit pairing code and then report telemetry every 30 seconds over your local network.
 
 - **Dedicated Mobile Miners screen** with the same card/grid views, search, filters, and sorting as the ASIC page
 - **Real-time telemetry:** hashrate (auto-scaled H/s through GH/s), CPU temperature, thermal throttle state, battery level with charging indicator, accepted/rejected shares, active pool
@@ -114,9 +114,9 @@ PoPManager includes an embedded HTTP server that receives push-based telemetry f
 
 ![System Tray Icon](docs/screenshots/Systray%20icon.png)
 
-## PoPMiner Mobile *(coming soon)*
+## PoPMobile *(coming soon)*
 
-**PoPMiner Mobile** is a companion Android app that turns your phone or tablet into a Kaspa miner and reports telemetry back to PoPManager over your local network.
+**PoPMobile** is a companion Android app that turns your phone or tablet into a Kaspa miner and reports telemetry back to PoPManager over your local network.
 
 - Mine Kaspa (KAS) using your device's CPU
 - Automatic server discovery via pairing code — no manual IP configuration
@@ -169,10 +169,10 @@ npm run tauri build
 6. Select miners on the ASIC Miners page and click **Apply Pool Profile** to push the config
 7. Check the **Dashboard** for your farm overview and profitability estimates
 
-### Mobile Miners (PoPMiner Mobile)
+### Mobile Miners (PoPMobile)
 1. Enable the mobile miner server in **Settings → Mobile Miner Server**
 2. Open the **Mobile Miners** tab and click **Add Device** to reveal the server URL and pairing code
-3. In PoPMiner Mobile, enter the server URL (e.g. `http://192.168.1.50:8787`) and the 6-digit pairing code
+3. In PoPMobile, enter the server URL (e.g. `http://192.168.1.50:8787`) and the 6-digit pairing code
 4. Once paired, the device will appear in the Mobile Miners list and begin reporting telemetry
 5. Use the **Remote Control** panel on any mobile miner's detail page to start, stop, or reconfigure mining
 6. Use the **Push to Mobile Miners** action on any Pool profile to configure multiple mobile devices at once
@@ -181,7 +181,7 @@ npm run tauri build
 
 **SmartScreen warning:** Because PoPManager v1 is distributed without an Authenticode code-signing certificate, Windows SmartScreen will display an "unrecognized app" warning the first time you run the installer. This is expected. Click **More info** on the warning dialog, then **Run anyway** to proceed. Subsequent launches will not show the warning on the same machine. Code signing is planned for a future release.
 
-**Firewall prompt:** PoPManager can run an embedded HTTP server on port 8787 for mobile miner telemetry. The server is **disabled by default** — enable it in **Settings → Mobile Miner Server** if you plan to use PoPMiner Mobile. When enabled, Windows Defender Firewall will prompt you to allow PoPManager to accept incoming connections on that port.
+**Firewall prompt:** PoPManager can run an embedded HTTP server on port 8787 for mobile miner telemetry. The server is **disabled by default** — enable it in **Settings → Mobile Miner Server** if you plan to use PoPMobile. When enabled, Windows Defender Firewall will prompt you to allow PoPManager to accept incoming connections on that port.
 
 ## Adding New Coins
 

@@ -508,7 +508,7 @@ export default function Dashboard() {
             </div>
             <h3 className="text-2xl font-bold text-white mb-2">Welcome to PoPManager</h3>
             <p className="text-sm text-slate-400 mb-8 leading-relaxed">
-              Get started by adding your first miner. PoPManager supports Iceriver, Whatsminer, and Antminer ASICs via automatic network discovery, plus mobile miners running the PoPMiner Mobile Android app.
+              Get started by adding your first miner. PoPManager supports Iceriver, Whatsminer, and Antminer ASICs via automatic network discovery, plus mobile miners running the PoPMobile Android app.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <button
