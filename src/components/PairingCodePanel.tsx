@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { QRCodeSVG } from "qrcode.react";
 
 function formatPairingCode(code: string): string {
   if (code.length !== 6) return code;
@@ -127,6 +128,27 @@ export default function PairingCodePanel({
             </button>
           </div>
         </div>
+
+        {/* QR Code */}
+        {serverUrl && code && (
+          <div className="flex flex-col items-center gap-2 py-3">
+            <div className="bg-white p-3 rounded-lg">
+              <QRCodeSVG
+                value={JSON.stringify({
+                  v: 1,
+                  type: "popmanager-register",
+                  url: serverUrl,
+                  code: code,
+                })}
+                size={180}
+                level="M"
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              Scan with PoPMiner Mobile to auto-fill server URL and pairing code
+            </p>
+          </div>
+        )}
 
         <p className="text-xs text-amber-400/80 flex items-start gap-1.5">
           <svg
