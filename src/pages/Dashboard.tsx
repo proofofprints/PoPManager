@@ -57,6 +57,14 @@ interface CoinGroup {
   offlineCount: number;
   totalHashrate: number;
   hashrateUnit: string;
+  asicCount: number;
+  mobileCount: number;
+}
+
+const COIN_TICKER_TO_ID: Record<string, string> = { KAS: "kaspa", BTC: "bitcoin" };
+function coinIdFromTicker(ticker: string): string {
+  if (!ticker) return "kaspa";
+  return COIN_TICKER_TO_ID[ticker.toUpperCase()] ?? ticker.toLowerCase();
 }
 
 type ProfitRange = 1 | 6 | 24 | 168 | 720;
@@ -332,13 +340,14 @@ export default function Dashboard() {
   }, [onlineMiners, minerWattage]);
 
   const coinGroups = useMemo<CoinGroup[]>(() => {
-    const byCoin = new Map<string, MinerWithSaved[]>();
+    // Track ASIC miners per coin
+    const asicByCoin = new Map<string, MinerWithSaved[]>();
     for (const saved of savedMiners) {
       const live = minerData.find((d) => d.info.ip === saved.ip);
       const activePoolAddr = live?.info.pools.find((p) => p.connect || p.state === 1)?.addr;
       const coinId = getMinerCoinId(activePoolAddr, poolProfiles, saved.coin_id);
-      if (!byCoin.has(coinId)) byCoin.set(coinId, []);
-      byCoin.get(coinId)!.push(
+      if (!asicByCoin.has(coinId)) asicByCoin.set(coinId, []);
+      asicByCoin.get(coinId)!.push(
         live ?? {
           info: {
             ip: saved.ip,
@@ -367,22 +376,49 @@ export default function Dashboard() {
       );
     }
 
-    return Array.from(byCoin.entries()).map(([coinId, group]) => {
+    // Track mobile miners per coin
+    const mobileByCoin = new Map<string, MobileMiner[]>();
+    for (const m of mobileMiners) {
+      const coinId = coinIdFromTicker(m.coin);
+      if (!mobileByCoin.has(coinId)) mobileByCoin.set(coinId, []);
+      mobileByCoin.get(coinId)!.push(m);
+    }
+
+    // Merge all coin IDs from both ASIC and mobile
+    const allCoinIds = new Set([...asicByCoin.keys(), ...mobileByCoin.keys()]);
+
+    return Array.from(allCoinIds).map((coinId) => {
       const coin = coins.find((c) => c.id === coinId);
-      const onlineMinersList = group.filter((g) => g.info.online);
-      const totalHashrate = group.reduce((s, g) => s + g.info.rtHashrate, 0);
-      const hashrateUnit = onlineMinersList[0]?.info.hashrateUnit ?? "G";
+      const asicGroup = asicByCoin.get(coinId) ?? [];
+      const mobileGroup = mobileByCoin.get(coinId) ?? [];
+
+      const asicOnline = asicGroup.filter((g) => g.info.online);
+      const mobileOnline = mobileGroup.filter((m) => m.isOnline);
+
+      // ASIC hashrate is in the miner's native unit (typically GH/s)
+      const asicHashrate = asicGroup.reduce((s, g) => s + g.info.rtHashrate, 0);
+      const hashrateUnit = asicOnline[0]?.info.hashrateUnit ?? "G";
+
+      // Mobile hashrate is raw H/s — convert to the ASIC unit for display
+      const mobileHashrateHs = mobileGroup.filter((m) => m.isOnline).reduce((s, m) => s + m.hashrateHs, 0);
+      const unitMultiplier: Record<string, number> = { K: 1e3, M: 1e6, G: 1e9, T: 1e12, P: 1e15 };
+      const mobileInUnit = mobileHashrateHs / (unitMultiplier[hashrateUnit] ?? 1e9);
+
+      const totalHashrate = asicHashrate + mobileInUnit;
+
       return {
         coinId,
         coin,
-        count: group.length,
-        onlineCount: onlineMinersList.length,
-        offlineCount: group.length - onlineMinersList.length,
+        count: asicGroup.length + mobileGroup.length,
+        onlineCount: asicOnline.length + mobileOnline.length,
+        offlineCount: (asicGroup.length - asicOnline.length) + (mobileGroup.length - mobileOnline.length),
         totalHashrate,
         hashrateUnit,
+        asicCount: asicGroup.length,
+        mobileCount: mobileGroup.length,
       };
     });
-  }, [savedMiners, minerData, coins, poolProfiles]);
+  }, [savedMiners, minerData, coins, poolProfiles, mobileMiners]);
 
   useEffect(() => {
     setCoinEarnings({});
@@ -810,7 +846,7 @@ export default function Dashboard() {
           {coinViewMode === "card" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {coinGroups.map(
-                ({ coinId, coin, count, onlineCount, offlineCount, totalHashrate, hashrateUnit }) => {
+                ({ coinId, coin, count, onlineCount, offlineCount, totalHashrate, hashrateUnit, asicCount, mobileCount }) => {
                   const color = coin?.color ?? "#6366f1";
                   const displayName = coin ? `${coin.name} (${coin.ticker})` : coinId;
                   const earnings = coinEarnings[coinId];
@@ -833,6 +869,9 @@ export default function Dashboard() {
                           </h4>
                           <p className="text-xs text-slate-400 mt-0.5">
                             {count} miner{count !== 1 ? "s" : ""}
+                            {asicCount > 0 && mobileCount > 0 && (
+                              <span className="text-slate-500"> ({asicCount} ASIC, {mobileCount} mobile)</span>
+                            )}
                           </p>
                         </div>
                         <div className="text-right">
