@@ -302,7 +302,7 @@ function MobileMinerCard({
           <p className="text-xs text-slate-300 truncate mt-0.5">{miner.pool}</p>
           <p className="text-xs text-slate-500">
             Accepted: {miner.acceptedShares.toLocaleString()} · Diff:{" "}
-            {miner.difficulty.toFixed(2)}
+            {miner.difficulty < 0.01 ? miner.difficulty.toPrecision(4) : miner.difficulty.toFixed(2)}
           </p>
         </div>
       )}
