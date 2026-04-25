@@ -21,7 +21,7 @@ pub struct FarmSnapshot {
     pub coin_data: HashMap<String, CoinSnapshot>,
 }
 
-const MAX_HISTORY_SECS: i64 = 7 * 24 * 3600;
+const MAX_HISTORY_SECS: i64 = 30 * 24 * 3600;
 
 fn history_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     let data_dir = app
@@ -71,7 +71,7 @@ pub async fn add_farm_snapshot(app: tauri::AppHandle, snapshot: FarmSnapshot) ->
     snapshots.retain(|s| s.timestamp > cutoff);
     let pruned = before - snapshots.len();
     if pruned > 0 {
-        log::info!("Farm history: pruned {} snapshot(s) older than 7 days", pruned);
+        log::info!("Farm history: pruned {} snapshot(s) older than 30 days", pruned);
     }
     log::info!("Farm snapshot saved ({} total snapshots)", snapshots.len());
     save_history(&app, &snapshots)
