@@ -846,7 +846,7 @@ export default function Dashboard() {
           {coinViewMode === "card" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {coinGroups.map(
-                ({ coinId, coin, count, onlineCount, offlineCount, totalHashrate, hashrateUnit, asicCount, mobileCount }) => {
+                ({ coinId, coin, count, offlineCount, totalHashrate, hashrateUnit, asicCount, mobileCount }) => {
                   const color = coin?.color ?? "#6366f1";
                   const displayName = coin ? `${coin.name} (${coin.ticker})` : coinId;
                   const earnings = coinEarnings[coinId];
@@ -888,51 +888,56 @@ export default function Dashboard() {
                           )}
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-4 gap-3">
                         <div className="bg-dark-900 rounded-lg p-3">
-                          <p className="text-xs text-slate-400 mb-1">Online</p>
-                          <p className="text-xl font-bold text-emerald-400">{onlineCount}</p>
+                          <p className="text-xs text-slate-400 mb-1">Total Miners</p>
+                          <p className="text-xl font-bold text-white">{count}</p>
+                        </div>
+                        <div className="bg-dark-900 rounded-lg p-3">
+                          <p className="text-xs text-slate-400 mb-1">ASIC</p>
+                          <p className="text-xl font-bold text-white">{asicCount}</p>
+                        </div>
+                        <div className="bg-dark-900 rounded-lg p-3">
+                          <p className="text-xs text-slate-400 mb-1">Mobile</p>
+                          <p className="text-xl font-bold text-white">{mobileCount}</p>
                         </div>
                         <div className="bg-dark-900 rounded-lg p-3">
                           <p className="text-xs text-slate-400 mb-1">Offline</p>
-                          <p
-                            className={`text-xl font-bold ${
-                              offlineCount > 0 ? "text-red-400" : "text-slate-500"
-                            }`}
-                          >
+                          <p className={`text-xl font-bold ${offlineCount > 0 ? "text-red-400" : "text-slate-500"}`}>
                             {offlineCount}
                           </p>
                         </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-3 mt-3">
                         <div className="bg-dark-900 rounded-lg p-3">
                           <p className="text-xs text-slate-400 mb-1">Hashrate</p>
-                          <p className="text-xl font-bold text-white">
-                            {totalHashrate.toFixed(1)}
-                          </p>
+                          <p className="text-xl font-bold text-white">{totalHashrate.toFixed(1)}</p>
                           <p className="text-xs text-slate-500">{hashrateUnit}H/s</p>
                         </div>
-                      </div>
-                      {earnings && (
-                        <div className="mt-3 pt-3 border-t border-slate-700/30 grid grid-cols-2 gap-2">
-                          <div>
-                            <p className="text-xs text-slate-400">Daily</p>
-                            <p className="text-sm font-semibold text-emerald-400">
-                              {earnings.dailyCoins.toFixed(coinDecimals)} {ticker}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {earnings.dailyFiat.toFixed(2)} {currencyCode}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-slate-400">Monthly</p>
-                            <p className="text-sm font-semibold text-emerald-400">
-                              {earnings.monthlyCoins.toFixed(coinDecimals)} {ticker}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {earnings.monthlyFiat.toFixed(2)} {currencyCode}
-                            </p>
-                          </div>
+                        <div className="bg-dark-900 rounded-lg p-3">
+                          <p className="text-xs text-slate-400 mb-1">Price</p>
+                          <p className="text-xl font-bold text-white">{earnings ? earnings.coinPrice.toFixed(4) : "--"}</p>
+                          <p className="text-xs text-slate-500">{currencyCode}</p>
                         </div>
-                      )}
+                        <div className="bg-dark-900 rounded-lg p-3">
+                          <p className="text-xs text-slate-400 mb-1">Daily</p>
+                          <p className="text-lg font-bold text-emerald-400">
+                            {earnings ? `${earnings.dailyCoins.toFixed(coinDecimals)} ${ticker}` : "--"}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {earnings ? `${earnings.dailyFiat.toFixed(2)} ${currencyCode}` : ""}
+                          </p>
+                        </div>
+                        <div className="bg-dark-900 rounded-lg p-3">
+                          <p className="text-xs text-slate-400 mb-1">Monthly</p>
+                          <p className="text-lg font-bold text-emerald-400">
+                            {earnings ? `${earnings.monthlyCoins.toFixed(coinDecimals)} ${ticker}` : "--"}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {earnings ? `${earnings.monthlyFiat.toFixed(2)} ${currencyCode}` : ""}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   );
                 }

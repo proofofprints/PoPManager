@@ -1029,7 +1029,7 @@ export default function MinerList() {
       {/* Header */}
       <div className="mb-6 flex items-end justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Miners</h2>
+          <h2 className="text-2xl font-bold text-white">ASIC Miners</h2>
           <p className="text-slate-400 mt-1">All saved miners — click to view details</p>
         </div>
         <div className="flex items-center gap-3">

@@ -9,7 +9,6 @@ import { appLogDir } from "@tauri-apps/api/path";
 import type { SmtpConfig } from "../types/alerts";
 import popLogo from "../assets/PopLogo.png";
 import { useProfitability } from "../context/ProfitabilityContext";
-import PairingCodePanel from "../components/PairingCodePanel";
 
 const EMPTY_SMTP: SmtpConfig = {
   smtpHost: "",
@@ -710,15 +709,6 @@ export default function Settings() {
             >
               {mobileSaving ? "Saving..." : "Save Configuration"}
             </button>
-            {mobileServerUrl && (
-              <div className="pt-2">
-                <PairingCodePanel
-                  serverUrl={mobileServerUrl}
-                  title="Device Pairing"
-                  subtitle="Use this code in the PoPMobile app to register a new device."
-                />
-              </div>
-            )}
           </div>
         </div>
 
