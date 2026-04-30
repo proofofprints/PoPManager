@@ -1,6 +1,6 @@
 [package]
 name = "pop-manager"
-version = "1.1.0"
+version = "1.2.0"
 description = "PoPManager - Open-source ASIC miner management by Proof of Prints"
 authors = ["Proof of Prints"]
 license = "MIT"
