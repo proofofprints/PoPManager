@@ -9,8 +9,8 @@ use tauri::Emitter;
 const POPMINER_SERVICE: &str = "_popminer._tcp.local.";
 
 /// Identity from GET /api/info (fetched once on discovery)
+/// Note: ESP32 API sends snake_case JSON, so NO rename_all here.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
 pub struct PopMinerInfo {
     #[serde(default)]
     pub fw: String,
@@ -33,8 +33,8 @@ pub struct PopMinerInfo {
 }
 
 /// Live stats from GET /api/stats (polled every 5s)
+/// Note: ESP32 API sends snake_case JSON, so NO rename_all here.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
 pub struct PopMinerStats {
     #[serde(default)]
     pub fw: String,
