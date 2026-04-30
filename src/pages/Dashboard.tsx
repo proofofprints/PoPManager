@@ -10,7 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import type { MinerInfo, SavedMiner, CoinEarnings, CoinConfig, FarmSnapshot, UptimeStats, MobileMiner } from "../types/miner";
+import type { MinerInfo, SavedMiner, CoinEarnings, CoinConfig, FarmSnapshot, UptimeStats, MobileMiner, PopMinerDevice } from "../types/miner";
 import { getMinerCoinId } from "../utils/coinLookup";
 import { getCoinIcon } from "../utils/coinIcon";
 import { useAlerts } from "../context/AlertContext";
@@ -100,6 +100,7 @@ export default function Dashboard() {
   const currencyCode = currency.toUpperCase();
   const [minerData, setMinerData] = useState<MinerWithSaved[]>([]);
   const [mobileMiners, setMobileMiners] = useState<MobileMiner[]>([]);
+  const [popMinerDevices, setPopMinerDevices] = useState<PopMinerDevice[]>([]);
   const [savedMiners, setSavedMiners] = useState<SavedMiner[]>([]);
   const [coins, setCoins] = useState<CoinConfig[]>([]);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
@@ -255,6 +256,14 @@ export default function Dashboard() {
     } catch (err) {
       console.error("Failed to load mobile miners:", err);
     }
+
+    // Fetch PoPMiner devices
+    try {
+      const popList = await invoke<PopMinerDevice[]>("get_popminer_devices");
+      setPopMinerDevices(popList);
+    } catch (err) {
+      console.error("Failed to load PoPMiner devices:", err);
+    }
   }, [checkAlerts, checkMobileAlerts, poolProfiles]);
 
   const fetchCoinEarnings = useCallback((groups: CoinGroup[], allMinerData: MinerWithSaved[]) => {
@@ -288,10 +297,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     invoke<SavedMiner[]>("get_saved_miners")
-      .then((saved) => {
+      .then(async (saved) => {
         setSavedMiners(saved);
+        await fetchAllStatuses(saved);
         setInitialLoaded(true);
-        fetchAllStatuses(saved);
       })
       .catch(() => setInitialLoaded(true));
     invoke<CoinConfig[]>("get_coins").then(setCoins).catch(console.error);
@@ -321,20 +330,27 @@ export default function Dashboard() {
   const onlineCount = miners.filter((m) => m.online).length;
   const unit = miners.find((m) => m.online)?.hashrateUnit ?? "G";
 
-  // Mobile miner stats
+  // Miner counts by type
   const asicCount = miners.length;
   const mobileCount = mobileMiners.length;
-  const totalCount = asicCount + mobileCount;
+  const popMinerCount = popMinerDevices.length;
+  const totalCount = asicCount + mobileCount + popMinerCount;
   const onlineAsicCount = onlineCount;
   const onlineMobileCount = mobileMiners.filter((m) => m.isOnline).length;
-  const totalOnline = onlineAsicCount + onlineMobileCount;
+  const onlinePopMinerCount = popMinerDevices.filter((d) => d.online).length;
+  const totalOnline = onlineAsicCount + onlineMobileCount + onlinePopMinerCount;
 
+  // Hashrate by type
   const asicHashrateGhs = totalRtHashrate;
   const mobileHashrateHs = mobileMiners
     .filter((m) => m.isOnline)
     .reduce((s, m) => s + m.hashrateHs, 0);
   const mobileHashrateGhs = mobileHashrateHs / 1e9;
-  const totalHashrateGhs = asicHashrateGhs + mobileHashrateGhs;
+  const popMinerHashrateHs = popMinerDevices
+    .filter((d) => d.online)
+    .reduce((s, d) => s + d.hashrate, 0);
+  const popMinerHashrateGhs = popMinerHashrateHs / 1e9;
+  const totalHashrateGhs = asicHashrateGhs + mobileHashrateGhs + popMinerHashrateGhs;
   const totalFarmWattage = useMemo(() => {
     return onlineMiners.reduce((sum, { saved }) => sum + (saved?.wattage ?? minerWattage), 0);
   }, [onlineMiners, minerWattage]);
@@ -534,7 +550,7 @@ export default function Dashboard() {
             <p className="text-sm text-slate-500">Loading miners...</p>
           </div>
         </div>
-      ) : totalCount === 0 && mobileCount === 0 ? (
+      ) : totalCount === 0 ? (
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="bg-dark-800 rounded-2xl border border-slate-700/50 p-10 max-w-lg text-center">
             <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-primary-500/10 border border-primary-500/30 flex items-center justify-center">
@@ -574,7 +590,7 @@ export default function Dashboard() {
       ) : (
         <>
       {/* Summary stats — Miners breakdown */}
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-4 gap-4 mb-4">
         <StatCard
           label="Total Miners"
           value={totalCount}
@@ -590,10 +606,15 @@ export default function Dashboard() {
           value={mobileCount}
           subline={`${onlineMobileCount} online`}
         />
+        <StatCard
+          label="PoPMiner Devices"
+          value={popMinerCount}
+          subline={`${onlinePopMinerCount} online`}
+        />
       </div>
 
       {/* Hashrate breakdown + uptime */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-5 gap-4 mb-6">
         <StatCard
           label="Total Hashrate"
           value={totalHashrateGhs.toFixed(1)}
@@ -607,6 +628,10 @@ export default function Dashboard() {
         <StatCard
           label="Mobile Hashrate"
           value={formatMobileHashrate(mobileHashrateHs)}
+        />
+        <StatCard
+          label="PoPMiner Hashrate"
+          value={formatMobileHashrate(popMinerHashrateHs)}
         />
         <StatCard
           label="Fleet Uptime (24h)"

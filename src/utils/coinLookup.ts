@@ -25,5 +25,9 @@ export function getMinerCoinId(
       if (matchingProfile?.coin_id) return matchingProfile.coin_id;
     }
   }
-  return savedMinerCoinId || "other";
+  // Fall back to the saved coin_id, but treat "other" as "kaspa" since
+  // Kaspa is the dominant use case and "other" was a legacy default that
+  // caused offline miners to appear in a separate "other" category.
+  const fallback = savedMinerCoinId || "other";
+  return fallback === "other" ? "kaspa" : fallback;
 }
