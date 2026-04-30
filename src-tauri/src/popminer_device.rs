@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::net::IpAddr;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use mdns_sd::{ServiceDaemon, ServiceEvent};
@@ -69,7 +71,7 @@ pub struct PopMinerStats {
 }
 
 /// Combined device state (sent to frontend)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PopMinerDevice {
     pub mac: String,
@@ -98,26 +100,165 @@ pub struct PopMinerDevice {
 }
 
 pub struct PopMinerDevicesState {
-    pub devices: Mutex<HashMap<String, PopMinerDevice>>,
+    /// Devices the user has explicitly added (persisted to disk)
+    pub saved: Mutex<HashMap<String, PopMinerDevice>>,
+    /// Devices discovered via mDNS but not yet added (ephemeral)
+    pub discovered: Mutex<HashMap<String, PopMinerDevice>>,
 }
 
-impl PopMinerDevicesState {
-    pub fn new() -> Self {
-        Self {
-            devices: Mutex::new(HashMap::new()),
+// ─── Persistence ─────────────────────────────────────────────────────────────
+
+fn popminer_devices_path() -> PathBuf {
+    let base = dirs::data_local_dir().unwrap_or_else(|| {
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| PathBuf::from("."))
+    });
+    base.join("PoPManager").join("popminer_devices.json")
+}
+
+/// Minimal struct for persistence — only identity fields, no live stats.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedDeviceEntry {
+    pub mac: String,
+    pub name: String,
+    pub model: String,
+    pub hostname: String,
+    pub ip: String,
+    pub fw: String,
+}
+
+pub fn load_saved_devices() -> HashMap<String, PopMinerDevice> {
+    let path = popminer_devices_path();
+    if !path.exists() {
+        return HashMap::new();
+    }
+    let content = fs::read_to_string(&path).unwrap_or_default();
+    let entries: Vec<SavedDeviceEntry> =
+        serde_json::from_str(&content).unwrap_or_default();
+    let mut map = HashMap::new();
+    for e in entries {
+        let device = PopMinerDevice {
+            mac: e.mac.clone(),
+            name: e.name,
+            model: e.model,
+            hostname: e.hostname,
+            ip: e.ip,
+            fw: e.fw,
+            sdk: String::new(),
+            mining: false,
+            pool_connected: false,
+            authorized: false,
+            hashrate: 0.0,
+            difficulty: 0.0,
+            submitted: 0,
+            accepted: 0,
+            rejected: 0,
+            blocks: 0,
+            jobs: 0,
+            total_hashes: 0.0,
+            pool: String::new(),
+            uptime_s: 0,
+            heap: 0,
+            online: false,
+            consecutive_failures: 0,
+        };
+        map.insert(e.mac, device);
+    }
+    map
+}
+
+fn save_devices_to_disk(devices: &HashMap<String, PopMinerDevice>) {
+    let path = popminer_devices_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let entries: Vec<SavedDeviceEntry> = devices
+        .values()
+        .map(|d| SavedDeviceEntry {
+            mac: d.mac.clone(),
+            name: d.name.clone(),
+            model: d.model.clone(),
+            hostname: d.hostname.clone(),
+            ip: d.ip.clone(),
+            fw: d.fw.clone(),
+        })
+        .collect();
+    match serde_json::to_string_pretty(&entries) {
+        Ok(content) => {
+            if let Err(e) = fs::write(&path, content) {
+                log::warn!("Failed to write popminer_devices.json: {}", e);
+            }
         }
+        Err(e) => log::warn!("Failed to serialize popminer devices: {}", e),
     }
 }
+
+// ─── Tauri commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub fn get_popminer_devices(
     state: tauri::State<Arc<PopMinerDevicesState>>,
 ) -> Vec<PopMinerDevice> {
-    let devices = state.devices.lock().unwrap();
-    let mut result: Vec<PopMinerDevice> = devices.values().cloned().collect();
+    let saved = state.saved.lock().unwrap();
+    let mut result: Vec<PopMinerDevice> = saved.values().cloned().collect();
     result.sort_by(|a, b| a.name.cmp(&b.name));
     result
 }
+
+#[tauri::command]
+pub fn get_discovered_popminer_devices(
+    state: tauri::State<Arc<PopMinerDevicesState>>,
+) -> Vec<PopMinerDevice> {
+    let saved = state.saved.lock().unwrap();
+    let discovered = state.discovered.lock().unwrap();
+    discovered
+        .values()
+        .filter(|d| !saved.contains_key(&d.mac))
+        .cloned()
+        .collect()
+}
+
+#[tauri::command]
+pub fn add_popminer_device(
+    mac: String,
+    state: tauri::State<Arc<PopMinerDevicesState>>,
+) -> Result<Vec<PopMinerDevice>, String> {
+    let discovered = state.discovered.lock().unwrap();
+    let device = discovered
+        .get(&mac)
+        .cloned()
+        .ok_or_else(|| format!("Device {} not found in discovered list", mac))?;
+    drop(discovered);
+
+    let mut saved = state.saved.lock().unwrap();
+    saved.insert(mac.clone(), device);
+    save_devices_to_disk(&saved);
+    log::info!("PoPMiner: added device {} to saved list", mac);
+
+    let mut result: Vec<PopMinerDevice> = saved.values().cloned().collect();
+    result.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn remove_popminer_device(
+    mac: String,
+    state: tauri::State<Arc<PopMinerDevicesState>>,
+) -> Result<Vec<PopMinerDevice>, String> {
+    let mut saved = state.saved.lock().unwrap();
+    saved.remove(&mac);
+    save_devices_to_disk(&saved);
+    log::info!("PoPMiner: removed device {} from saved list", mac);
+
+    let mut result: Vec<PopMinerDevice> = saved.values().cloned().collect();
+    result.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(result)
+}
+
+// ─── Discovery ───────────────────────────────────────────────────────────────
 
 pub async fn start_popminer_discovery(
     app_handle: tauri::AppHandle,
@@ -272,14 +413,29 @@ pub async fn start_popminer_discovery(
                     consecutive_failures: 0,
                 };
 
-                // Insert into state
+                // Insert into discovered map (always)
                 {
-                    let mut devices = devices_state.devices.lock().unwrap();
-                    devices.insert(mac.clone(), device.clone());
+                    let mut discovered = devices_state.discovered.lock().unwrap();
+                    discovered.insert(mac.clone(), device.clone());
                 }
 
-                // Emit discovery event
-                let _ = app_handle.emit("popminer-device-discovered", &device);
+                // If device is already in saved map, update its identity/online fields
+                {
+                    let mut saved = devices_state.saved.lock().unwrap();
+                    if let Some(saved_dev) = saved.get_mut(&mac) {
+                        saved_dev.name = device.name.clone();
+                        saved_dev.model = device.model.clone();
+                        saved_dev.hostname = device.hostname.clone();
+                        saved_dev.ip = device.ip.clone();
+                        saved_dev.fw = device.fw.clone();
+                        saved_dev.sdk = device.sdk.clone();
+                        saved_dev.online = true;
+                        saved_dev.consecutive_failures = 0;
+                        let updated = saved_dev.clone();
+                        drop(saved);
+                        let _ = app_handle.emit("popminer-device-stats", &updated);
+                    }
+                }
 
                 // Spawn polling task if not already running
                 let already_polling = {
@@ -308,29 +464,26 @@ pub async fn start_popminer_discovery(
                                     if let Ok(stats) =
                                         resp.json::<PopMinerStats>().await
                                     {
-                                        let mut devices =
-                                            poll_state.devices.lock().unwrap();
-                                        if let Some(device) =
-                                            devices.get_mut(&poll_mac)
+                                        // Update discovered map
                                         {
-                                            device.mining = stats.mining;
-                                            device.pool_connected =
-                                                stats.pool_connected;
-                                            device.authorized = stats.authorized;
-                                            device.hashrate = stats.hashrate;
-                                            device.difficulty = stats.difficulty;
-                                            device.submitted = stats.submitted;
-                                            device.accepted = stats.accepted;
-                                            device.rejected = stats.rejected;
-                                            device.blocks = stats.blocks;
-                                            device.jobs = stats.jobs;
-                                            device.total_hashes = stats.total_hashes;
-                                            device.pool = stats.pool;
-                                            device.uptime_s = stats.uptime_s;
-                                            device.online = true;
-                                            device.consecutive_failures = 0;
+                                            let mut discovered =
+                                                poll_state.discovered.lock().unwrap();
+                                            if let Some(device) =
+                                                discovered.get_mut(&poll_mac)
+                                            {
+                                                apply_stats(device, &stats);
+                                            }
+                                        }
+
+                                        // Update saved map and emit event
+                                        let mut saved =
+                                            poll_state.saved.lock().unwrap();
+                                        if let Some(device) =
+                                            saved.get_mut(&poll_mac)
+                                        {
+                                            apply_stats(device, &stats);
                                             let updated = device.clone();
-                                            drop(devices);
+                                            drop(saved);
                                             let _ = poll_app.emit(
                                                 "popminer-device-stats",
                                                 &updated,
@@ -339,36 +492,36 @@ pub async fn start_popminer_discovery(
                                     }
                                 }
                                 Err(_) => {
-                                    let mut devices =
-                                        poll_state.devices.lock().unwrap();
+                                    // Update failure count in discovered map
+                                    {
+                                        let mut discovered =
+                                            poll_state.discovered.lock().unwrap();
+                                        if let Some(device) =
+                                            discovered.get_mut(&poll_mac)
+                                        {
+                                            device.consecutive_failures += 1;
+                                            if device.consecutive_failures >= 3 {
+                                                device.online = false;
+                                            }
+                                            if device.consecutive_failures >= 6 {
+                                                discovered.remove(&poll_mac);
+                                            }
+                                        }
+                                    }
+
+                                    // Update failure count in saved map
+                                    let mut saved =
+                                        poll_state.saved.lock().unwrap();
                                     if let Some(device) =
-                                        devices.get_mut(&poll_mac)
+                                        saved.get_mut(&poll_mac)
                                     {
                                         device.consecutive_failures += 1;
                                         let failures = device.consecutive_failures;
 
-                                        if failures >= 6 {
-                                            let mac_clone = poll_mac.clone();
-                                            devices.remove(&poll_mac);
-                                            drop(devices);
-                                            log::info!(
-                                                "PoPMiner: {} removed after {} consecutive failures",
-                                                mac_clone,
-                                                failures
-                                            );
-                                            let _ = poll_app.emit(
-                                                "popminer-device-lost",
-                                                serde_json::json!({ "mac": mac_clone }),
-                                            );
-                                            // Remove self from polling tasks and exit
-                                            let mut tasks =
-                                                poll_tasks_ref.lock().unwrap();
-                                            tasks.remove(&mac_clone);
-                                            return;
-                                        } else if failures == 3 {
+                                        if failures == 3 {
                                             device.online = false;
                                             let updated = device.clone();
-                                            drop(devices);
+                                            drop(saved);
                                             log::info!(
                                                 "PoPMiner: {} marked offline after 3 failures",
                                                 poll_mac
@@ -377,6 +530,30 @@ pub async fn start_popminer_discovery(
                                                 "popminer-device-stats",
                                                 &updated,
                                             );
+                                        } else if failures >= 6 {
+                                            // Don't remove saved devices — keep them as offline.
+                                            // Only remove the polling task.
+                                            drop(saved);
+                                            log::info!(
+                                                "PoPMiner: {} stopping poll after {} consecutive failures (device stays saved)",
+                                                poll_mac,
+                                                failures
+                                            );
+                                            let mut tasks =
+                                                poll_tasks_ref.lock().unwrap();
+                                            tasks.remove(&poll_mac);
+                                            return;
+                                        }
+                                    } else {
+                                        // Device not in saved — check if discovered was cleaned
+                                        let discovered =
+                                            poll_state.discovered.lock().unwrap();
+                                        if !discovered.contains_key(&poll_mac) {
+                                            drop(discovered);
+                                            let mut tasks =
+                                                poll_tasks_ref.lock().unwrap();
+                                            tasks.remove(&poll_mac);
+                                            return;
                                         }
                                     }
                                 }
@@ -404,4 +581,23 @@ pub async fn start_popminer_discovery(
             }
         }
     }
+}
+
+/// Apply stats from a poll response to a device.
+fn apply_stats(device: &mut PopMinerDevice, stats: &PopMinerStats) {
+    device.mining = stats.mining;
+    device.pool_connected = stats.pool_connected;
+    device.authorized = stats.authorized;
+    device.hashrate = stats.hashrate;
+    device.difficulty = stats.difficulty;
+    device.submitted = stats.submitted;
+    device.accepted = stats.accepted;
+    device.rejected = stats.rejected;
+    device.blocks = stats.blocks;
+    device.jobs = stats.jobs;
+    device.total_hashes = stats.total_hashes;
+    device.pool = stats.pool.clone();
+    device.uptime_s = stats.uptime_s;
+    device.online = true;
+    device.consecutive_failures = 0;
 }

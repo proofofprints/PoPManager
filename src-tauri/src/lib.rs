@@ -3,6 +3,7 @@ mod http_server;
 mod mdns;
 mod popminer_device;
 
+use std::collections::HashMap;
 use tauri::Manager;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -32,7 +33,7 @@ use commands::notifications::send_desktop_notification;
 use commands::uptime::{record_uptime, get_uptime_stats, get_all_uptime_stats, clear_uptime_data};
 use commands::export::{export_miners_csv, export_alert_history_csv, export_profitability_csv, export_farm_history_csv};
 use commands::tray::{TrayState, update_tray_tooltip};
-use popminer_device::get_popminer_devices;
+use popminer_device::{get_popminer_devices, get_discovered_popminer_devices, add_popminer_device, remove_popminer_device};
 use commands::mobile_miner::{
     get_mobile_miners, remove_mobile_miner, update_mobile_miner_name,
     get_mobile_server_config, save_mobile_server_config, get_mobile_server_url,
@@ -90,7 +91,11 @@ pub fn run() {
             app.manage(std::sync::Arc::clone(&commands_arc));
 
             // PoPMiner device discovery (always on — no toggle needed)
-            let popminer_state = std::sync::Arc::new(popminer_device::PopMinerDevicesState::new());
+            let saved_popminer = popminer_device::load_saved_devices();
+            let popminer_state = std::sync::Arc::new(popminer_device::PopMinerDevicesState {
+                saved: std::sync::Mutex::new(saved_popminer),
+                discovered: std::sync::Mutex::new(HashMap::new()),
+            });
             app.manage(std::sync::Arc::clone(&popminer_state));
 
             let app_handle_for_popminer = app.handle().clone();
@@ -273,6 +278,9 @@ pub fn run() {
             clear_mobile_command_history,
             cancel_mobile_command,
             get_popminer_devices,
+            get_discovered_popminer_devices,
+            add_popminer_device,
+            remove_popminer_device,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
