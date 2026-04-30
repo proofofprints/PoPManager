@@ -77,6 +77,30 @@ export default function Sidebar() {
         </NavLink>
 
         <NavLink
+          to="/popminer-devices"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              isActive
+                ? "bg-primary-600 text-white"
+                : "text-slate-400 hover:bg-slate-800 hover:text-white"
+            }`
+          }
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}>
+            <rect x="6" y="6" width="12" height="12" rx="1" />
+            <line x1="9" y1="2" x2="9" y2="6" />
+            <line x1="15" y1="2" x2="15" y2="6" />
+            <line x1="9" y1="18" x2="9" y2="22" />
+            <line x1="15" y1="18" x2="15" y2="22" />
+            <line x1="2" y1="9" x2="6" y2="9" />
+            <line x1="2" y1="15" x2="6" y2="15" />
+            <line x1="18" y1="9" x2="22" y2="9" />
+            <line x1="18" y1="15" x2="22" y2="15" />
+          </svg>
+          PoPMiner Devices
+        </NavLink>
+
+        <NavLink
           to="/pools"
           className={({ isActive }) =>
             `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${

@@ -1,6 +1,7 @@
 mod commands;
 mod http_server;
 mod mdns;
+mod popminer_device;
 
 use tauri::Manager;
 use tauri::menu::{Menu, MenuItem};
@@ -31,6 +32,7 @@ use commands::notifications::send_desktop_notification;
 use commands::uptime::{record_uptime, get_uptime_stats, get_all_uptime_stats, clear_uptime_data};
 use commands::export::{export_miners_csv, export_alert_history_csv, export_profitability_csv, export_farm_history_csv};
 use commands::tray::{TrayState, update_tray_tooltip};
+use popminer_device::get_popminer_devices;
 use commands::mobile_miner::{
     get_mobile_miners, remove_mobile_miner, update_mobile_miner_name,
     get_mobile_server_config, save_mobile_server_config, get_mobile_server_url,
@@ -86,6 +88,16 @@ pub fn run() {
             app.manage(std::sync::Arc::clone(&miners_arc));
             app.manage(std::sync::Arc::clone(&config_arc));
             app.manage(std::sync::Arc::clone(&commands_arc));
+
+            // PoPMiner device discovery (always on — no toggle needed)
+            let popminer_state = std::sync::Arc::new(popminer_device::PopMinerDevicesState::new());
+            app.manage(std::sync::Arc::clone(&popminer_state));
+
+            let app_handle_for_popminer = app.handle().clone();
+            let popminer_state_clone = std::sync::Arc::clone(&popminer_state);
+            tauri::async_runtime::spawn(async move {
+                popminer_device::start_popminer_discovery(app_handle_for_popminer, popminer_state_clone).await;
+            });
 
             // Offline detection task: mark miners as offline if they miss 2 intervals.
             {
@@ -260,6 +272,7 @@ pub fn run() {
             get_mobile_commands,
             clear_mobile_command_history,
             cancel_mobile_command,
+            get_popminer_devices,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

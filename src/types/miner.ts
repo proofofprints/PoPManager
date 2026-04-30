@@ -236,6 +236,32 @@ export interface FarmSnapshot {
   coinData: Record<string, CoinSnapshot>;
 }
 
+export interface PopMinerDevice {
+  mac: string;
+  name: string;
+  model: string;
+  hostname: string;
+  ip: string;
+  fw: string;
+  sdk: string;
+  mining: boolean;
+  poolConnected: boolean;
+  authorized: boolean;
+  hashrate: number;
+  difficulty: number;
+  submitted: number;
+  accepted: number;
+  rejected: number;
+  blocks: number;
+  jobs: number;
+  totalHashes: number;
+  pool: string;
+  uptimeS: number;
+  heap: number;
+  online: boolean;
+  consecutiveFailures: number;
+}
+
 /** Convert a saved PoolProfile to the API payload format. */
 export function profileToPayload(p: PoolProfile): PoolConfigPayload {
   return {
