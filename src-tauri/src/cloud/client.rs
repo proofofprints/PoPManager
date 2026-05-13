@@ -51,6 +51,19 @@ pub struct InstanceInfo {
     pub version: Option<String>,
 }
 
+/// Wrapper for GET /instances response: { "instances": [...] }
+#[derive(Debug, Deserialize)]
+pub struct InstancesListResponse {
+    #[serde(default)]
+    pub instances: Vec<InstanceInfo>,
+}
+
+/// Wrapper for POST /instances response: { "instance": {...} }
+#[derive(Debug, Deserialize)]
+pub struct InstanceCreateResponse {
+    pub instance: InstanceInfo,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IngestResponse {
@@ -114,8 +127,8 @@ pub async fn create_or_get_instance(jwt: &str) -> Result<InstanceInfo, String> {
         .map_err(|e| format!("Failed to get instances: {}", e))?;
 
     if resp.status().is_success() {
-        let instances: Vec<InstanceInfo> = resp.json().await.unwrap_or_default();
-        if let Some(inst) = instances.into_iter().next() {
+        let wrapper: InstancesListResponse = resp.json().await.unwrap_or(InstancesListResponse { instances: vec![] });
+        if let Some(inst) = wrapper.instances.into_iter().next() {
             log::info!("Cloud: using existing instance '{}'", inst.name);
             return Ok(inst);
         }
@@ -140,8 +153,9 @@ pub async fn create_or_get_instance(jwt: &str) -> Result<InstanceInfo, String> {
         return Err(format!("Failed to create instance ({}): {}", status, body));
     }
 
-    let inst: InstanceInfo = resp.json().await
+    let wrapper: InstanceCreateResponse = resp.json().await
         .map_err(|e| format!("Failed to parse instance response: {}", e))?;
+    let inst = wrapper.instance;
 
     log::info!("Cloud: created new instance '{}'", inst.name);
     Ok(inst)
