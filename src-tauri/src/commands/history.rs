@@ -81,14 +81,23 @@ pub async fn add_farm_snapshot(app: tauri::AppHandle, snapshot: FarmSnapshot) ->
     save_history(&app, &snapshots)?;
 
     // Push to cloud sync if logged in
-    if let Some(cloud_state) = app.try_state::<Arc<crate::cloud::CloudState>>() {
-        if cloud_state.api_key.lock().unwrap().is_some() {
-            if let Some(payload) = cloud_payload {
-                *cloud_state.latest_snapshot.lock().unwrap() = Some(payload.clone());
-                if let Err(e) = crate::cloud::queue::enqueue("snapshot", &payload) {
-                    log::warn!("Cloud: failed to enqueue snapshot: {}", e);
+    match app.try_state::<Arc<crate::cloud::CloudState>>() {
+        Some(cloud_state) => {
+            let has_key = cloud_state.api_key.lock().unwrap().is_some();
+            if has_key {
+                if let Some(payload) = cloud_payload {
+                    *cloud_state.latest_snapshot.lock().unwrap() = Some(payload.clone());
+                    match crate::cloud::queue::enqueue("snapshot", &payload) {
+                        Ok(()) => log::info!("Cloud: snapshot enqueued for sync"),
+                        Err(e) => log::warn!("Cloud: failed to enqueue snapshot: {}", e),
+                    }
                 }
+            } else {
+                log::debug!("Cloud: snapshot skipped — no API key");
             }
+        }
+        None => {
+            log::debug!("Cloud: snapshot skipped — CloudState not available");
         }
     }
 

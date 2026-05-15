@@ -29,6 +29,7 @@ pub async fn start_sync_loop(
         };
 
         cycle += 1;
+        log::info!("Cloud sync: cycle {} — checking for data to push", cycle);
 
         // --- 1. Push latest snapshot if available ---
         let snapshot = {
@@ -36,13 +37,13 @@ pub async fn start_sync_loop(
         };
 
         if let Some(payload) = snapshot {
-            log::debug!("Cloud sync: pushing latest snapshot");
+            log::info!("Cloud sync: pushing snapshot to cloud");
             match client::push_snapshot(&api_key, &payload).await {
                 Ok(()) => {
                     let now_ms = chrono::Utc::now().timestamp_millis();
                     *cloud_state.last_sync.lock().unwrap() = Some(now_ms);
                     *cloud_state.status.lock().unwrap() = CloudSyncStatus::Connected;
-                    log::debug!("Cloud sync: snapshot pushed successfully");
+                    log::info!("Cloud sync: snapshot pushed successfully");
                 }
                 Err(e) => {
                     log::warn!("Cloud sync: snapshot push failed, queueing — {}", e);
