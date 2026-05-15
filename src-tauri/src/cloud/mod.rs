@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
+use tauri::Manager;
 
 pub mod auth;
 pub mod client;
@@ -64,6 +65,7 @@ pub struct CloudStatusResponse {
 
 #[tauri::command]
 pub async fn cloud_login(
+    app: tauri::AppHandle,
     email: String,
     password: String,
     state: tauri::State<'_, Arc<CloudState>>,
@@ -91,6 +93,24 @@ pub async fn cloud_login(
     }
 
     log::info!("Cloud: logged in as {} (instance: {})", email, instance.name);
+
+    // 5. Immediately enqueue the latest snapshot so the sync loop picks it up
+    //    within 60 seconds instead of waiting for the next poll cycle (~3.75 min)
+    let history_path = app.path().app_data_dir()
+        .map(|d| d.join("history.json"))
+        .unwrap_or_default();
+    if let Ok(history_json) = std::fs::read_to_string(&history_path) {
+        if let Ok(snapshots) = serde_json::from_str::<Vec<serde_json::Value>>(&history_json) {
+            if let Some(latest) = snapshots.last() {
+                *state.latest_snapshot.lock().unwrap() = Some(latest.clone());
+                if let Err(e) = queue::enqueue("snapshot", latest) {
+                    log::warn!("Cloud: failed to enqueue initial snapshot: {}", e);
+                } else {
+                    log::info!("Cloud: initial snapshot enqueued for immediate sync");
+                }
+            }
+        }
+    }
 
     Ok(cloud_status_from_state(&state))
 }
