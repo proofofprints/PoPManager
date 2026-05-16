@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { debug } from "../utils/logger";
+import { listen } from "@tauri-apps/api/event";
 import {
   AreaChart,
   Area,
@@ -13,34 +13,21 @@ import {
 import type { MinerInfo, SavedMiner, CoinEarnings, CoinConfig, FarmSnapshot, UptimeStats, MobileMiner, PopMinerDevice } from "../types/miner";
 import { getMinerCoinId } from "../utils/coinLookup";
 import { getCoinIcon } from "../utils/coinIcon";
-import { useAlerts } from "../context/AlertContext";
 import { useProfitability } from "../context/ProfitabilityContext";
-import type { MinerSnapshot, MobileMinerSnapshot } from "../types/alerts";
 import { formatMobileHashrate } from "./MobileMinerList";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 
-const POLL_INTERVAL_MS = 45_000;
-
-function extractWorkerName(user: string): string | null {
-  const dot = user.lastIndexOf(".");
-  if (dot !== -1 && dot < user.length - 1) {
-    return user.slice(dot + 1);
-  }
-  return null;
+interface CachedFarmStateResponse {
+  asicMiners: MinerInfo[];
+  mobileMiners: MobileMiner[];
+  popminerDevices: PopMinerDevice[];
+  farmSnapshot: FarmSnapshot | null;
+  lastAsicPollMs: number;
+  lastSnapshotMs: number;
 }
 
-function resolveDisplayName(miner: MinerInfo, saved: SavedMiner | undefined): string {
-  if (saved && saved.label && saved.label !== miner.ip) {
-    return saved.label;
-  }
-  const activePool = miner.pools.find((p) => p.connect);
-  if (activePool) {
-    const worker = extractWorkerName(activePool.user);
-    if (worker) return worker;
-  }
-  return miner.hostname || miner.ip;
-}
+const STALE_THRESHOLD_MS = 15 * 60 * 1000;
 
 type CoinViewMode = "card" | "list";
 
@@ -95,7 +82,6 @@ function StatCard({
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { checkAlerts, checkMobileAlerts } = useAlerts();
   const { currency, poolFeePercent, electricityCostPerKwh, minerWattage, poolProfiles } = useProfitability();
   const currencyCode = currency.toUpperCase();
   const [minerData, setMinerData] = useState<MinerWithSaved[]>([]);
@@ -103,7 +89,7 @@ export default function Dashboard() {
   const [popMinerDevices, setPopMinerDevices] = useState<PopMinerDevice[]>([]);
   const [savedMiners, setSavedMiners] = useState<SavedMiner[]>([]);
   const [coins, setCoins] = useState<CoinConfig[]>([]);
-  const [lastRefresh, setLastRefresh] = useState<string | null>(null);
+  const [lastPollMs, setLastPollMs] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [coinEarnings, setCoinEarnings] = useState<Record<string, CoinEarnings>>({});
@@ -115,7 +101,6 @@ export default function Dashboard() {
   const [chartRange, setChartRange] = useState<ChartRange>(24);
   const [profitRange, setProfitRange] = useState<ProfitRange>(24);
   const [fleetUptime, setFleetUptime] = useState<number | null>(null);
-  const pollCycleRef = useRef(0);
 
   function getPoolFeeForMiner(info: MinerInfo): number {
     const activePool = info.pools.find((p) => p.connect || p.state === 1);
@@ -133,138 +118,71 @@ export default function Dashboard() {
     return poolFeePercent;
   }
 
-  const fetchAllStatuses = useCallback(async (saved: SavedMiner[]) => {
-    if (saved.length === 0) return;
-    debug(`Poll cycle start: ${saved.length} miner(s)`).catch(() => {});
-    const results = await Promise.allSettled(
-      saved.map((s) =>
-        invoke<MinerInfo>("get_miner_status", { ip: s.ip, manufacturer: s.manufacturer ?? "unknown" }).then((info) => ({ info, saved: s }))
-      )
-    );
-    const data: MinerWithSaved[] = results
-      .filter(
-        (r): r is PromiseFulfilledResult<{ info: MinerInfo; saved: SavedMiner }> =>
-          r.status === "fulfilled"
-      )
-      .map((r) => r.value);
+  const loadFromCache = useCallback(
+    async (saved: SavedMiner[]) => {
+      try {
+        const cached = await invoke<CachedFarmStateResponse>("get_cached_farm_state");
 
-    results.forEach((r, i) => {
-      if (r.status === "rejected") {
-        const s = saved[i];
-        data.push({
-          info: {
-            ip: s.ip,
-            hostname: s.label,
-            mac: "",
-            model: "Unknown",
-            status: "offline",
-            firmware: "",
-            software: "",
-            online: false,
-            rtHashrate: 0,
-            avgHashrate: 0,
-            hashrateUnit: "G",
-            runtime: "--",
-            runtimeSecs: 0,
-            fans: [],
-            boards: [],
-            pools: [],
-            hashrateHistory: [],
-            health: { power: false, network: false, fan: false, temp: false },
-            lastSeen: new Date().toISOString(),
-            defaultWattage: 100,
-          },
-          saved: s,
+        // Join ASIC miners with saved entries to preserve the MinerWithSaved
+        // shape used by the rest of the file. Any saved miner missing from the
+        // cache (poller hasn't fetched it yet) gets an offline placeholder.
+        const byIp = new Map(cached.asicMiners.map((m) => [m.ip, m]));
+        const data: MinerWithSaved[] = saved.map((s) => {
+          const info = byIp.get(s.ip);
+          if (info) return { info, saved: s };
+          return {
+            info: {
+              ip: s.ip,
+              hostname: s.label,
+              mac: "",
+              model: "Unknown",
+              status: "offline",
+              firmware: "",
+              software: "",
+              online: false,
+              rtHashrate: 0,
+              avgHashrate: 0,
+              hashrateUnit: "G",
+              runtime: "--",
+              runtimeSecs: 0,
+              fans: [],
+              boards: [],
+              pools: [],
+              hashrateHistory: [],
+              health: { power: false, network: false, fan: false, temp: false },
+              lastSeen: new Date().toISOString(),
+              defaultWattage: s.wattage ?? 100,
+            },
+            saved: s,
+          };
         });
+
+        setMinerData(data);
+        setMobileMiners(cached.mobileMiners);
+        setPopMinerDevices(cached.popminerDevices);
+        setLastPollMs(cached.lastAsicPollMs);
+      } catch (err) {
+        console.error("Failed to load cached farm state:", err);
       }
-    });
 
-    const onlineCount = data.filter((d) => d.info.online).length;
-    debug(`Poll cycle complete: ${onlineCount}/${data.length} online`).catch(() => {});
-    setMinerData(data);
-    setLastRefresh(new Date().toLocaleTimeString());
+      // Fetch fleet uptime stats (cheap; recomputed from uptime.json by Rust)
+      invoke<Record<string, UptimeStats>>("get_all_uptime_stats", { hours: 24 })
+        .then((stats) => {
+          const values = Object.values(stats);
+          if (values.length > 0) {
+            const avg = values.reduce((s, v) => s + v.uptime_percent, 0) / values.length;
+            setFleetUptime(avg);
+          }
+        })
+        .catch(console.error);
 
-    // Record uptime for each miner
-    data.forEach(({ info }) => {
-      invoke("record_uptime", { ip: info.ip, online: info.status === "online" }).catch(console.error);
-    });
-
-    // Fetch fleet uptime stats
-    invoke<Record<string, UptimeStats>>("get_all_uptime_stats", { hours: 24 })
-      .then((stats) => {
-        const values = Object.values(stats);
-        if (values.length > 0) {
-          const avg = values.reduce((s, v) => s + v.uptime_percent, 0) / values.length;
-          setFleetUptime(avg);
-        }
-      })
-      .catch(console.error);
-
-    pollCycleRef.current += 1;
-    if (pollCycleRef.current % 5 === 1) {
-      const onlineData = data.filter((d) => d.info.online);
-      const totalHashrate = onlineData.reduce((s, d) => s + d.info.rtHashrate, 0);
-      const coinDataMap: Record<string, { hashrate: number; minerCount: number }> = {};
-      for (const { info, saved: s } of onlineData) {
-        const activePoolAddr = info.pools.find((p) => p.connect || p.state === 1)?.addr;
-        const cid = getMinerCoinId(activePoolAddr, poolProfiles, s?.coin_id);
-        if (!coinDataMap[cid]) coinDataMap[cid] = { hashrate: 0, minerCount: 0 };
-        coinDataMap[cid].hashrate += info.rtHashrate;
-        coinDataMap[cid].minerCount += 1;
-      }
-      const coinData: FarmSnapshot["coinData"] = {};
-      for (const [cid, d] of Object.entries(coinDataMap)) {
-        coinData[cid] = { hashrate: d.hashrate, minerCount: d.minerCount, dailyEarningsCoins: 0, dailyEarningsFiat: 0 };
-      }
-      const snapshot: FarmSnapshot = {
-        timestamp: Math.floor(Date.now() / 1000),
-        totalHashrate,
-        onlineCount: onlineData.length,
-        totalMiners: data.length,
-        coinData,
-      };
-      invoke("add_farm_snapshot", { snapshot }).catch(console.error);
+      // Refresh history chart on each event — new snapshots may have been added.
       invoke<FarmSnapshot[]>("get_farm_history", { hours: 720 })
         .then(setFarmHistory)
         .catch(console.error);
-    }
-
-    const snapshots: MinerSnapshot[] = data.map(({ info, saved: s }) => ({
-      ip: info.ip,
-      label: resolveDisplayName(info, s),
-      online: info.online,
-      rtHashrate: info.rtHashrate,
-      boards: info.boards.map((b) => ({ inTmp: b.inTmp, outTmp: b.outTmp })),
-      acceptedShares: info.pools.reduce((sum, p) => sum + (p.accepted || 0), 0),
-    }));
-    checkAlerts(snapshots);
-
-    // Fetch mobile miners + evaluate mobile alerts
-    try {
-      const mobileList = await invoke<MobileMiner[]>("get_mobile_miners");
-      setMobileMiners(mobileList);
-      const mobileSnapshots: MobileMinerSnapshot[] = mobileList.map((m) => ({
-        deviceId: m.deviceId,
-        name: m.name,
-        isOnline: m.isOnline,
-        batteryLevel: m.batteryLevel,
-        batteryCharging: m.batteryCharging,
-        cpuTemp: m.cpuTemp,
-        throttleState: m.throttleState,
-      }));
-      checkMobileAlerts(mobileSnapshots);
-    } catch (err) {
-      console.error("Failed to load mobile miners:", err);
-    }
-
-    // Fetch PoPMiner devices
-    try {
-      const popList = await invoke<PopMinerDevice[]>("get_popminer_devices");
-      setPopMinerDevices(popList);
-    } catch (err) {
-      console.error("Failed to load PoPMiner devices:", err);
-    }
-  }, [checkAlerts, checkMobileAlerts, poolProfiles]);
+    },
+    []
+  );
 
   const fetchCoinEarnings = useCallback((groups: CoinGroup[], allMinerData: MinerWithSaved[]) => {
     groups.forEach(({ coinId, totalHashrate }) => {
@@ -295,30 +213,46 @@ export default function Dashboard() {
     });
   }, [poolFeePercent, currency, poolProfiles]);
 
+  // Initial mount: hydrate saved miners + cached state, then render.
   useEffect(() => {
     invoke<SavedMiner[]>("get_saved_miners")
       .then(async (saved) => {
         setSavedMiners(saved);
-        await fetchAllStatuses(saved);
+        await loadFromCache(saved);
         setInitialLoaded(true);
       })
       .catch(() => setInitialLoaded(true));
     invoke<CoinConfig[]>("get_coins").then(setCoins).catch(console.error);
-    invoke<FarmSnapshot[]>("get_farm_history", { hours: 720 })
-      .then(setFarmHistory)
-      .catch(console.error);
-  }, [fetchAllStatuses]);
+  }, [loadFromCache]);
 
+  // Subscribe to background poller events. Resubscribes when the saved list
+  // changes (e.g. after Add Device) so the listener closes over the latest
+  // saved miners.
   useEffect(() => {
-    if (savedMiners.length === 0) return;
-    const id = setInterval(() => fetchAllStatuses(savedMiners), POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [savedMiners, fetchAllStatuses]);
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    listen("farm-state-updated", () => {
+      loadFromCache(savedMiners).catch(console.error);
+    }).then((h) => {
+      if (cancelled) h();
+      else unlisten = h;
+    });
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, [savedMiners, loadFromCache]);
 
   async function handleManualRefresh() {
     setRefreshing(true);
     try {
-      await fetchAllStatuses(savedMiners);
+      await invoke("force_poll_asic");
+      // Poller emits "farm-state-updated" when the cycle completes; keep the
+      // spinner up briefly so the click feels responsive even if the network
+      // poll is fast.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    } catch (err) {
+      console.error("Force poll failed:", err);
     } finally {
       setRefreshing(false);
     }
@@ -514,8 +448,11 @@ export default function Dashboard() {
           <p className="text-slate-400 mt-1">Farm overview at a glance</p>
         </div>
         <div className="flex items-center gap-3">
-          {lastRefresh && (
-            <p className="text-xs text-slate-500">Last updated: {lastRefresh}</p>
+          {lastPollMs > 0 && (
+            <p className={`text-xs ${Date.now() - lastPollMs > STALE_THRESHOLD_MS ? "text-amber-400" : "text-slate-500"}`}>
+              {Date.now() - lastPollMs > STALE_THRESHOLD_MS ? "Stale — last updated " : "Last updated "}
+              {new Date(lastPollMs).toLocaleTimeString()}
+            </p>
           )}
           <button
             onClick={handleManualRefresh}

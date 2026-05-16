@@ -1,7 +1,9 @@
+mod cached_state;
 mod cloud;
 mod commands;
 mod http_server;
 mod mdns;
+mod poller;
 mod popminer_device;
 
 use std::collections::HashMap;
@@ -35,6 +37,10 @@ use commands::uptime::{record_uptime, get_uptime_stats, get_all_uptime_stats, cl
 use commands::export::{export_miners_csv, export_alert_history_csv, export_profitability_csv, export_farm_history_csv};
 use commands::tray::{TrayState, update_tray_tooltip};
 use popminer_device::{get_popminer_devices, get_discovered_popminer_devices, add_popminer_device, remove_popminer_device};
+use cached_state::{
+    CachedFarmState, get_cached_asic_miners, get_cached_farm_state, get_last_poll_time,
+    force_poll_asic, force_poll_single_miner,
+};
 use commands::mobile_miner::{
     get_mobile_miners, remove_mobile_miner, update_mobile_miner_name,
     get_mobile_server_config, save_mobile_server_config, get_mobile_server_url,
@@ -145,6 +151,20 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 popminer_device::start_popminer_discovery(app_handle_for_popminer, popminer_state_clone).await;
             });
+
+            // Cached farm state + background poller. The poller owns ALL data
+            // polling that used to live in the React frontend: ASIC HTTP polls,
+            // alert evaluation, farm snapshot generation, cloud-sync feeding.
+            // Pages now read from this cache and listen for `farm-state-updated`
+            // events instead of running their own setInterval loops.
+            let cached_state = std::sync::Arc::new(cached_state::CachedFarmState::new());
+            app.manage(std::sync::Arc::clone(&cached_state));
+            poller::spawn_all(
+                app.handle().clone(),
+                std::sync::Arc::clone(&cached_state),
+                std::sync::Arc::clone(&miners_arc),
+                std::sync::Arc::clone(&popminer_state),
+            );
 
             // Offline detection task: mark miners as offline if they miss 2 intervals.
             {
@@ -327,6 +347,11 @@ pub fn run() {
             cloud_logout,
             cloud_status,
             cloud_update_instance_name,
+            get_cached_asic_miners,
+            get_cached_farm_state,
+            get_last_poll_time,
+            force_poll_asic,
+            force_poll_single_miner,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

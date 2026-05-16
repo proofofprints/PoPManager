@@ -10,14 +10,13 @@ import {
   Legend,
 } from "recharts";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import type { MinerInfo, CoinEarnings, PoolProfile, SavedMiner, UptimeStats, CoinConfig } from "../types/miner";
 import { profileToPayload } from "../types/miner";
 import { useProfitability } from "../context/ProfitabilityContext";
 import { getMinerCoinId } from "../utils/coinLookup";
 import { getCoinIcon } from "../utils/coinIcon";
-
-const POLL_INTERVAL_MS = 45_000;
 
 const HEALTH_COLORS: Record<string, string> = {
   ok: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
@@ -120,6 +119,8 @@ export default function MinerDetail() {
   const [miner, setMiner] = useState<MinerInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [manufacturer, setManufacturer] = useState<string>("");
   const [earnings, setEarnings] = useState<CoinEarnings | null>(null);
   const [savedCoinId, setSavedCoinId] = useState<string>("kaspa");
   const [coins, setCoins] = useState<CoinConfig[]>([]);
@@ -143,23 +144,57 @@ export default function MinerDetail() {
     return getMinerCoinId(activePoolAddr, poolProfiles, savedCoinId);
   }, [miner, poolProfiles, savedCoinId]);
 
-  const fetchStatus = useCallback(async () => {
+  // Pull this miner's latest snapshot from the background poller's cache. The
+  // poller refreshes every 45s; this page only triggers an immediate single-
+  // miner poll when the user clicks Refresh.
+  const loadFromCache = useCallback(async () => {
     if (!decodedIp) return;
     try {
-      const info = await invoke<MinerInfo>("get_miner_status", { ip: decodedIp });
+      const all = await invoke<MinerInfo[]>("get_cached_asic_miners");
+      const found = all.find((m) => m.ip === decodedIp);
+      if (found) {
+        setMiner(found);
+        setError(null);
+        setLastRefresh(new Date().toLocaleTimeString());
+      }
+    } catch (err) {
+      console.error("Failed to read cached miner state:", err);
+    }
+  }, [decodedIp]);
+
+  const fetchStatus = useCallback(async () => {
+    if (!decodedIp) return;
+    setRefreshing(true);
+    try {
+      const info = await invoke<MinerInfo>("force_poll_single_miner", {
+        ip: decodedIp,
+        manufacturer: manufacturer || null,
+      });
       setMiner(info);
       setError(null);
       setLastRefresh(new Date().toLocaleTimeString());
     } catch (err) {
       setError(String(err));
+    } finally {
+      setRefreshing(false);
     }
-  }, [decodedIp]);
+  }, [decodedIp, manufacturer]);
 
   useEffect(() => {
-    fetchStatus();
-    const id = setInterval(fetchStatus, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [fetchStatus]);
+    loadFromCache();
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    listen("farm-state-updated", () => {
+      loadFromCache();
+    }).then((h) => {
+      if (cancelled) h();
+      else unlisten = h;
+    });
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, [loadFromCache]);
 
   useEffect(() => {
     setPoolFeePercent(defaultFeePercent);
@@ -177,6 +212,7 @@ export default function MinerDetail() {
       if (found) {
         setThisWattage(found.wattage ?? minerWattage);
         setSavedCoinId(found.coin_id ?? "kaspa");
+        setManufacturer(found.manufacturer ?? "");
       }
     }).catch(console.error);
   }, [decodedIp, minerWattage]);
@@ -291,6 +327,17 @@ export default function MinerDetail() {
           {lastRefresh && (
             <p className="text-xs text-slate-500">Updated: {lastRefresh}</p>
           )}
+          <button
+            onClick={fetchStatus}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-800 border border-slate-700/50 hover:border-primary-500/50 disabled:opacity-40 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition-colors"
+          >
+            <svg className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {refreshing ? "Refreshing..." : "Refresh now"}
+          </button>
           <button
             onClick={() => openUrl(`http://${decodedIp}`)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-800 border border-slate-700/50 hover:border-primary-500/50 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition-colors"

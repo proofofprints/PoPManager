@@ -107,6 +107,30 @@ pub fn update_miner_label(ip: String, label: String) -> Result<Vec<SavedMiner>, 
     Ok(miners)
 }
 
+/// Backfill the `manufacturer` field for a saved miner. Called by the
+/// background poller after a successful auto-detect so subsequent cycles can
+/// go straight to the detected manufacturer's fetcher instead of running
+/// auto-detect (3 HTTP attempts) every time. Legacy entries from older
+/// PoPManager versions had no manufacturer field; this lets them upgrade in
+/// place. No-op if the IP isn't in the saved list or the new value is empty.
+pub fn update_miner_manufacturer(ip: &str, manufacturer: &str) -> Result<(), String> {
+    if manufacturer.is_empty() {
+        return Ok(());
+    }
+    let mut miners = load_miners();
+    let mut changed = false;
+    if let Some(m) = miners.iter_mut().find(|m| m.ip == ip) {
+        if m.manufacturer != manufacturer {
+            m.manufacturer = manufacturer.to_string();
+            changed = true;
+        }
+    }
+    if changed {
+        save_miners(&miners)?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn import_from_scan(ips: Vec<String>, manufacturers: Option<Vec<String>>, coin_id: Option<String>) -> Result<Vec<SavedMiner>, String> {
     let mut miners = load_miners();

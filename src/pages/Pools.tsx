@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { PoolProfile, SavedMiner, MinerInfo, CoinConfig, MobileMiner } from "../types/miner";
 import { getCoinIcon } from "../utils/coinIcon";
 import { formatMobileHashrate } from "./MobileMinerList";
@@ -234,32 +235,42 @@ export default function Pools() {
   useEffect(() => {
     invoke<PoolProfile[]>("get_saved_pools").then(setProfiles).catch(console.error);
     invoke<CoinConfig[]>("get_coins").then(setCoins).catch(console.error);
-    invoke<MobileMiner[]>("get_mobile_miners").then(setMobileMiners).catch(console.error);
+
+    const loadLive = async () => {
+      try {
+        const [asic, mobile] = await Promise.all([
+          invoke<MinerInfo[]>("get_cached_asic_miners"),
+          invoke<MobileMiner[]>("get_mobile_miners"),
+        ]);
+        const map = new Map<string, MinerInfo>();
+        for (const m of asic) map.set(m.ip, m);
+        setMinerData(map);
+        setMobileMiners(mobile);
+      } catch (err) {
+        console.error("Failed to refresh pool matches:", err);
+      }
+    };
 
     invoke<SavedMiner[]>("get_saved_miners")
       .then(async (miners) => {
         setSavedMiners(miners);
-        const results = await Promise.allSettled(
-          miners.map((m) => invoke<MinerInfo>("get_miner_status", { ip: m.ip }))
-        );
-        const map = new Map<string, MinerInfo>();
-        results.forEach((r, i) => {
-          if (r.status === "fulfilled") {
-            map.set(miners[i].ip, r.value);
-          }
-        });
-        setMinerData(map);
+        await loadLive();
       })
       .catch(console.error)
       .finally(() => setLoadingMiners(false));
-  }, []);
 
-  // Poll mobile miners every 30s so matches stay fresh
-  useEffect(() => {
-    const id = setInterval(() => {
-      invoke<MobileMiner[]>("get_mobile_miners").then(setMobileMiners).catch(console.error);
-    }, 30000);
-    return () => clearInterval(id);
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    listen("farm-state-updated", () => {
+      loadLive();
+    }).then((h) => {
+      if (cancelled) h();
+      else unlisten = h;
+    });
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
   }, []);
 
   function updateForm(field: keyof FormState, value: string) {

@@ -9,15 +9,13 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import type { MobileMiner } from "../types/miner";
-import type { MobileMinerSnapshot } from "../types/alerts";
 import { getCoinIcon } from "../utils/coinIcon";
-import { useAlerts } from "../context/AlertContext";
 import PairingCodePanel from "../components/PairingCodePanel";
 
-const POLL_INTERVAL_MS = 10_000;
 const MAX_HISTORY_POINTS = 30;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -599,7 +597,6 @@ type ViewMode = "card" | "grid";
 
 export default function MobileMinerList() {
   const navigate = useNavigate();
-  const { checkMobileAlerts } = useAlerts();
 
   const [miners, setMiners] = useState<MobileMiner[]>([]);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
@@ -656,24 +653,12 @@ export default function MobileMinerList() {
       }
       setMiners(list);
       setLastRefresh(new Date().toLocaleTimeString());
-
-      // Evaluate alert rules for mobile miners
-      const snapshots: MobileMinerSnapshot[] = list.map((m) => ({
-        deviceId: m.deviceId,
-        name: m.name,
-        isOnline: m.isOnline,
-        batteryLevel: m.batteryLevel,
-        batteryCharging: m.batteryCharging,
-        cpuTemp: m.cpuTemp,
-        throttleState: m.throttleState,
-      }));
-      checkMobileAlerts(snapshots);
     } catch (err) {
       console.error("Failed to load mobile miners:", err);
     } finally {
       setLoading(false);
     }
-  }, [checkMobileAlerts]);
+  }, []);
 
   async function handleConfirmRemove() {
     if (!removeTarget) return;
@@ -770,8 +755,18 @@ export default function MobileMinerList() {
   useEffect(() => {
     fetchMiners();
     invoke<string>("get_mobile_server_url").then(setServerUrl).catch(console.error);
-    const id = setInterval(fetchMiners, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    listen("farm-state-updated", () => {
+      fetchMiners();
+    }).then((h) => {
+      if (cancelled) h();
+      else unlisten = h;
+    });
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
   }, [fetchMiners]);
 
   async function handleManualRefresh() {

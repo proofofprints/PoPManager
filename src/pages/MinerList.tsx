@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
@@ -16,11 +17,9 @@ import type { MinerInfo, SavedMiner, CoinConfig, PoolProfile, UptimeStats } from
 import { getMinerCoinId } from "../utils/coinLookup";
 import { getCoinIcon } from "../utils/coinIcon";
 import { profileToPayload } from "../types/miner";
-import { useAlerts } from "../context/AlertContext";
-import type { MinerSnapshot } from "../types/alerts";
 import AsicAddDevicePanel from "../components/AsicAddDevicePanel";
 
-const POLL_INTERVAL_MS = 45_000;
+const STALE_THRESHOLD_MS = 15 * 60 * 1000;
 
 function extractWorkerName(user: string): string | null {
   const dot = user.lastIndexOf(".");
@@ -567,13 +566,12 @@ interface MinerWithSaved {
 
 export default function MinerList() {
   const navigate = useNavigate();
-  const { checkAlerts } = useAlerts();
   const [searchParams] = useSearchParams();
 
   const [minerData, setMinerData] = useState<MinerWithSaved[]>([]);
   const [savedMiners, setSavedMiners] = useState<SavedMiner[]>([]);
   const [coins, setCoins] = useState<CoinConfig[]>([]);
-  const [lastRefresh, setLastRefresh] = useState<string | null>(null);
+  const [lastPollMs, setLastPollMs] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -627,67 +625,48 @@ export default function MinerList() {
       .catch(console.error);
   }, []);
 
-  const fetchAllStatuses = useCallback(
-    async (saved: SavedMiner[]) => {
-      if (saved.length === 0) return;
-      const results = await Promise.allSettled(
-        saved.map((s) =>
-          invoke<MinerInfo>("get_miner_status", { ip: s.ip, manufacturer: s.manufacturer ?? "unknown" }).then((info) => ({ info, saved: s }))
-        )
-      );
-      const data: MinerWithSaved[] = results
-        .filter(
-          (r): r is PromiseFulfilledResult<{ info: MinerInfo; saved: SavedMiner }> =>
-            r.status === "fulfilled"
-        )
-        .map((r) => r.value);
-
-      results.forEach((r, i) => {
-        if (r.status === "rejected") {
-          const s = saved[i];
-          data.push({
-            info: {
-              ip: s.ip,
-              hostname: s.label,
-              mac: "",
-              model: "Unknown",
-              status: "offline",
-              firmware: "",
-              software: "",
-              online: false,
-              rtHashrate: 0,
-              avgHashrate: 0,
-              hashrateUnit: "G",
-              runtime: "--",
-              runtimeSecs: 0,
-              fans: [],
-              boards: [],
-              pools: [],
-              hashrateHistory: [],
-              health: { power: false, network: false, fan: false, temp: false },
-              lastSeen: new Date().toISOString(),
-              defaultWattage: 100,
-            },
-            saved: s,
-          });
-        }
+  const loadFromCache = useCallback(async (saved: SavedMiner[]) => {
+    try {
+      const [cached, pollTime] = await Promise.all([
+        invoke<MinerInfo[]>("get_cached_asic_miners"),
+        invoke<number>("get_last_poll_time"),
+      ]);
+      const byIp = new Map(cached.map((m) => [m.ip, m]));
+      const data: MinerWithSaved[] = saved.map((s) => {
+        const info = byIp.get(s.ip);
+        if (info) return { info, saved: s };
+        return {
+          info: {
+            ip: s.ip,
+            hostname: s.label,
+            mac: "",
+            model: pollTime === 0 ? "..." : "Unknown",
+            status: pollTime === 0 ? ("unknown" as const) : "offline",
+            firmware: "",
+            software: "",
+            online: false,
+            rtHashrate: 0,
+            avgHashrate: 0,
+            hashrateUnit: "G",
+            runtime: "--",
+            runtimeSecs: 0,
+            fans: [],
+            boards: [],
+            pools: [],
+            hashrateHistory: [],
+            health: { power: false, network: false, fan: false, temp: false },
+            lastSeen: new Date().toISOString(),
+            defaultWattage: s.wattage ?? 100,
+          },
+          saved: s,
+        };
       });
-
       setMinerData(data);
-      setLastRefresh(new Date().toLocaleTimeString());
-
-      const snapshots: MinerSnapshot[] = data.map(({ info, saved: s }) => ({
-        ip: info.ip,
-        label: resolveDisplayName(info, s),
-        online: info.online,
-        rtHashrate: info.rtHashrate,
-        boards: info.boards.map((b) => ({ inTmp: b.inTmp, outTmp: b.outTmp })),
-        acceptedShares: info.pools.reduce((sum, p) => sum + (p.accepted || 0), 0),
-      }));
-      checkAlerts(snapshots);
-    },
-    [checkAlerts]
-  );
+      setLastPollMs(pollTime);
+    } catch (err) {
+      console.error("Failed to load cached miners:", err);
+    }
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -695,57 +674,41 @@ export default function MinerList() {
       invoke<CoinConfig[]>("get_coins"),
       invoke<PoolProfile[]>("get_saved_pools"),
     ])
-      .then(([miners, coinList, profiles]) => {
+      .then(async ([miners, coinList, profiles]) => {
         setSavedMiners(miners);
         setCoins(coinList);
         setPoolProfiles(profiles);
-        // Populate with saved data immediately so the page renders before live polls complete
-        setMinerData(
-          miners.map((s) => ({
-            info: {
-              ip: s.ip,
-              hostname: s.label,
-              mac: "",
-              model: "...",
-              status: "unknown" as const,
-              firmware: "",
-              software: "",
-              online: false,
-              rtHashrate: 0,
-              avgHashrate: 0,
-              hashrateUnit: "G",
-              runtime: "--",
-              runtimeSecs: 0,
-              fans: [],
-              boards: [],
-              pools: [],
-              hashrateHistory: [],
-              health: { power: false, network: false, fan: false, temp: false },
-              lastSeen: new Date().toISOString(),
-              defaultWattage: s.wattage ?? 100,
-            },
-            saved: s,
-          }))
-        );
+        await loadFromCache(miners);
         setLoading(false);
-        fetchAllStatuses(miners);
       })
       .catch((err) => {
         console.error(err);
         setLoading(false);
       });
-  }, [fetchAllStatuses]);
+  }, [loadFromCache]);
 
   useEffect(() => {
-    if (savedMiners.length === 0) return;
-    const id = setInterval(() => fetchAllStatuses(savedMiners), POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [savedMiners, fetchAllStatuses]);
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    listen("farm-state-updated", () => {
+      loadFromCache(savedMiners).catch(console.error);
+    }).then((h) => {
+      if (cancelled) h();
+      else unlisten = h;
+    });
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, [savedMiners, loadFromCache]);
 
   async function handleManualRefresh() {
     setRefreshing(true);
     try {
-      await fetchAllStatuses(savedMiners);
+      await invoke("force_poll_asic");
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    } catch (err) {
+      console.error("Force poll failed:", err);
     } finally {
       setRefreshing(false);
     }
@@ -982,8 +945,10 @@ export default function MinerList() {
       setSelectedIps(new Set());
       setShowRemoveModal(false);
       setRemoveTargetIps([]);
-      // Trigger a fresh poll so statuses are accurate
-      fetchAllStatuses(updated);
+      // Refresh from cache now (in case the poller already excluded the
+      // removed miners) and ask for an immediate poll cycle.
+      loadFromCache(updated).catch(console.error);
+      invoke("force_poll_asic").catch(console.error);
     } catch (err) {
       console.error("Bulk remove failed:", err);
       setRemoveError(String(err));
@@ -1033,8 +998,11 @@ export default function MinerList() {
           <p className="text-slate-400 mt-1">All saved miners — click to view details</p>
         </div>
         <div className="flex items-center gap-3">
-          {lastRefresh && (
-            <p className="text-xs text-slate-500">Last updated: {lastRefresh}</p>
+          {lastPollMs > 0 && (
+            <p className={`text-xs ${Date.now() - lastPollMs > STALE_THRESHOLD_MS ? "text-amber-400" : "text-slate-500"}`}>
+              {Date.now() - lastPollMs > STALE_THRESHOLD_MS ? "Stale — last updated " : "Last updated "}
+              {new Date(lastPollMs).toLocaleTimeString()}
+            </p>
           )}
           <button
             onClick={() => setShowAddPanel((v) => !v)}
@@ -1083,7 +1051,9 @@ export default function MinerList() {
               invoke<SavedMiner[]>("get_saved_miners")
                 .then((miners) => {
                   setSavedMiners(miners);
-                  fetchAllStatuses(miners);
+                  // Ask the poller to fetch the new miner immediately so the
+                  // user doesn't wait up to 45s for the next tick.
+                  invoke("force_poll_asic").catch(console.error);
                 })
                 .catch(console.error);
             }}
