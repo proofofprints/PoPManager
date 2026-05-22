@@ -5,7 +5,9 @@ use tokio_tungstenite::tungstenite::Message;
 
 use super::{command_exec, CloudState, CloudSyncStatus};
 
-const WS_URL_BASE: &str = "wss://cloud.proofofprints.com/api/v1/ws";
+// See note in cloud/client.rs — the API host is cloud-api.proofofprints.com,
+// NOT cloud.proofofprints.com (which serves the React portal).
+const WS_URL_BASE: &str = "wss://cloud-api.proofofprints.com/api/v1/ws";
 const PING_INTERVAL_SECS: u64 = 30;
 
 /// Backoff schedule: 5s → 10s → 30s → 60s (cap)

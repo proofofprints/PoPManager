@@ -1,7 +1,11 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-const CLOUD_API_URL: &str = "https://cloud.proofofprints.com";
+// The cloud API runs at cloud-api.proofofprints.com. The bare `cloud.`
+// subdomain now hosts the web portal (Cloudflare static assets) and will
+// return 405 Method Not Allowed for any POST that hits it. Don't put the
+// portal URL here — it's a different host with no API routes.
+const CLOUD_API_URL: &str = "https://cloud-api.proofofprints.com";
 
 fn api_url(path: &str) -> String {
     format!("{}{}", CLOUD_API_URL, path)
