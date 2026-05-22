@@ -24,11 +24,12 @@ pub fn open_queue() -> Result<Connection, String> {
     conn.execute_batch("PRAGMA journal_mode=WAL;")
         .map_err(|e| format!("Failed to set WAL mode: {}", e))?;
 
-    // Create table if not exists
+    // Create table if not exists. The CHECK constraint allows the kinds the
+    // sync loop currently knows how to push.
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS cloud_sync_queue (
             id              INTEGER PRIMARY KEY,
-            kind            TEXT NOT NULL CHECK (kind IN ('snapshot', 'alert')),
+            kind            TEXT NOT NULL CHECK (kind IN ('snapshot', 'alert', 'miners')),
             payload_json    TEXT NOT NULL,
             created_at      INTEGER NOT NULL,
             attempts        INTEGER NOT NULL DEFAULT 0,
@@ -38,6 +39,42 @@ pub fn open_queue() -> Result<Connection, String> {
         CREATE INDEX IF NOT EXISTS cloud_sync_queue_created_idx
             ON cloud_sync_queue(created_at);"
     ).map_err(|e| format!("Failed to create queue table: {}", e))?;
+
+    // Migration: older installs created the table with a CHECK that allowed
+    // only ('snapshot', 'alert'). SQLite can't ALTER a CHECK constraint, so
+    // rebuild the table when the existing definition doesn't include 'miners'.
+    let existing_sql: String = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='cloud_sync_queue'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or_default();
+    if !existing_sql.is_empty() && !existing_sql.contains("'miners'") {
+        log::info!("Cloud queue: migrating CHECK constraint to allow 'miners' kind");
+        conn.execute_batch(
+            "BEGIN;
+             CREATE TABLE cloud_sync_queue_new (
+                 id              INTEGER PRIMARY KEY,
+                 kind            TEXT NOT NULL CHECK (kind IN ('snapshot', 'alert', 'miners')),
+                 payload_json    TEXT NOT NULL,
+                 created_at      INTEGER NOT NULL,
+                 attempts        INTEGER NOT NULL DEFAULT 0,
+                 last_attempt_at INTEGER,
+                 last_error      TEXT
+             );
+             INSERT INTO cloud_sync_queue_new
+                 (id, kind, payload_json, created_at, attempts, last_attempt_at, last_error)
+                 SELECT id, kind, payload_json, created_at, attempts, last_attempt_at, last_error
+                 FROM cloud_sync_queue;
+             DROP TABLE cloud_sync_queue;
+             ALTER TABLE cloud_sync_queue_new RENAME TO cloud_sync_queue;
+             CREATE INDEX IF NOT EXISTS cloud_sync_queue_created_idx
+                 ON cloud_sync_queue(created_at);
+             COMMIT;",
+        )
+        .map_err(|e| format!("Failed to migrate queue table: {}", e))?;
+    }
 
     Ok(conn)
 }

@@ -58,7 +58,33 @@ pub async fn start_sync_loop(
             }
         }
 
-        // --- 2. Drain offline queue ---
+        // --- 2. Push latest miners state if available ---
+        let miners = {
+            cloud_state.latest_miners.lock().unwrap().take()
+        };
+
+        if let Some(payload) = miners {
+            log::info!("Cloud sync: pushing miner state to cloud");
+            match client::push_miners(&api_key, &payload).await {
+                Ok(()) => {
+                    let now_ms = chrono::Utc::now().timestamp_millis();
+                    *cloud_state.last_sync.lock().unwrap() = Some(now_ms);
+                    *cloud_state.status.lock().unwrap() = CloudSyncStatus::Connected;
+                    log::info!("Cloud sync: miner state pushed successfully");
+                }
+                Err(e) => {
+                    log::warn!("Cloud sync: miner push failed, queueing — {}", e);
+                    if let Err(qe) = queue::enqueue("miners", &payload) {
+                        log::warn!("Cloud sync: failed to enqueue miners: {}", qe);
+                    }
+                    if e.contains("(401)") || e.contains("(403)") {
+                        *cloud_state.status.lock().unwrap() = CloudSyncStatus::AuthRequired;
+                    }
+                }
+            }
+        }
+
+        // --- 3. Drain offline queue ---
         match queue::peek(10) {
             Ok(items) => {
                 for item in items {
@@ -72,6 +98,11 @@ pub async fn start_sync_loop(
                             let payload: serde_json::Value =
                                 serde_json::from_str(&item.payload_json).unwrap_or_default();
                             client::push_alert(&api_key, &payload).await
+                        }
+                        "miners" => {
+                            let payload: serde_json::Value =
+                                serde_json::from_str(&item.payload_json).unwrap_or_default();
+                            client::push_miners(&api_key, &payload).await
                         }
                         other => {
                             log::warn!("Cloud sync: unknown queue item kind '{}'", other);
@@ -110,12 +141,12 @@ pub async fn start_sync_loop(
             }
         }
 
-        // --- 3. Update queue size ---
+        // --- 4. Update queue size ---
         if let Ok(count) = queue::count() {
             *cloud_state.queue_size.lock().unwrap() = count;
         }
 
-        // --- 4. Periodic prune (every ~100 cycles ≈ 100 minutes) ---
+        // --- 5. Periodic prune (every ~100 cycles ≈ 100 minutes) ---
         if cycle % 100 == 0 {
             if let Err(e) = queue::prune() {
                 log::warn!("Cloud sync: prune failed: {}", e);

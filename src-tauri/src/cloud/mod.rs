@@ -31,6 +31,7 @@ pub struct CloudState {
     pub last_sync: Mutex<Option<i64>>,  // unix timestamp ms
     pub queue_size: Mutex<u64>,         // number of pending items
     pub latest_snapshot: Mutex<Option<serde_json::Value>>,
+    pub latest_miners: Mutex<Option<serde_json::Value>>,
 }
 
 impl CloudState {
@@ -44,6 +45,7 @@ impl CloudState {
             last_sync: Mutex::new(None),
             queue_size: Mutex::new(0),
             latest_snapshot: Mutex::new(None),
+            latest_miners: Mutex::new(None),
         }
     }
 }

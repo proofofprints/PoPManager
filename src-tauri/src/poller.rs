@@ -52,9 +52,9 @@ pub fn spawn_all(
         let app = app.clone();
         let cache = Arc::clone(&cache);
         let mobile_state = Arc::clone(&mobile_state);
-        let _popminer_state = Arc::clone(&popminer_state);
+        let popminer_state = Arc::clone(&popminer_state);
         tauri::async_runtime::spawn(async move {
-            snapshot_loop(app, cache, mobile_state).await;
+            snapshot_loop(app, cache, mobile_state, popminer_state).await;
         });
     }
 
@@ -318,6 +318,7 @@ async fn snapshot_loop(
     app: AppHandle,
     cache: Arc<CachedFarmState>,
     mobile_state: Arc<MobileMinersState>,
+    popminer_state: Arc<PopMinerDevicesState>,
 ) {
     log::info!(
         "Background poller: snapshot task starting (initial delay {}s)",
@@ -329,7 +330,7 @@ async fn snapshot_loop(
     // tick resolves immediately, which would cause two snapshots in rapid
     // succession on startup before settling into the 60s cadence.
     loop {
-        build_and_persist_snapshot(&app, &cache, &mobile_state).await;
+        build_and_persist_snapshot(&app, &cache, &mobile_state, &popminer_state).await;
         tokio::time::sleep(Duration::from_secs(SNAPSHOT_INTERVAL_SECS)).await;
     }
 }
@@ -338,6 +339,7 @@ async fn build_and_persist_snapshot(
     app: &AppHandle,
     cache: &Arc<CachedFarmState>,
     mobile_state: &Arc<MobileMinersState>,
+    popminer_state: &Arc<PopMinerDevicesState>,
 ) {
     let asic = cache.asic_miners.lock().unwrap().clone();
     let saved_miners = crate::commands::storage::get_saved_miners().unwrap_or_default();
@@ -346,6 +348,11 @@ async fn build_and_persist_snapshot(
 
     let mobile_miners: Vec<_> = {
         let map = mobile_state.miners.lock().unwrap();
+        map.values().cloned().collect()
+    };
+
+    let popminer_devices: Vec<_> = {
+        let map = popminer_state.saved.lock().unwrap();
         map.values().cloned().collect()
     };
 
@@ -418,6 +425,12 @@ async fn build_and_persist_snapshot(
         log::warn!("Snapshot persist failed: {}", e);
     }
 
+    // Stage per-miner state for the cloud sync loop. This mirrors the snapshot
+    // staging in history::add_farm_snapshot, but for the /ingest/miners
+    // endpoint which populates the cloud `miner_states` table (drives the web
+    // Dashboard's "Total Miners" tile).
+    stage_miners_for_cloud(app, &asic, &saved_miners, &mobile_miners, &popminer_devices);
+
     {
         let mut slot = cache.farm_snapshot.lock().unwrap();
         *slot = Some(snapshot);
@@ -425,6 +438,117 @@ async fn build_and_persist_snapshot(
     *cache.last_snapshot_ms.lock().unwrap() = Utc::now().timestamp_millis();
 
     let _ = app.emit("farm-state-updated", ());
+}
+
+/// Convert local ASIC / mobile / PoPMiner records into the shape the
+/// `/api/v1/ingest/miners` endpoint expects, stage it on `CloudState`, and
+/// enqueue a fallback copy so the next sync cycle picks it up. Mirrors the
+/// snapshot wiring in `commands::history::add_farm_snapshot`.
+fn stage_miners_for_cloud(
+    app: &AppHandle,
+    asic: &[MinerInfo],
+    saved_miners: &[SavedMiner],
+    mobile_miners: &[crate::commands::mobile_miner::MobileMiner],
+    popminer_devices: &[crate::popminer_device::PopMinerDevice],
+) {
+    use tauri::Manager;
+
+    let cloud_state = match app.try_state::<Arc<crate::cloud::CloudState>>() {
+        Some(s) => s,
+        None => {
+            log::debug!("Cloud: miners staging skipped — CloudState not available");
+            return;
+        }
+    };
+
+    if cloud_state.api_key.lock().unwrap().is_none() {
+        log::debug!("Cloud: miners staging skipped — no API key");
+        return;
+    }
+
+    let mut miners_json: Vec<serde_json::Value> = Vec::new();
+
+    // ASIC miners — minerId keyed on IP (stable per device on a LAN). Label
+    // resolved the same way the Dashboard does it so cloud row labels match.
+    for m in asic {
+        let saved = saved_miners.iter().find(|s| s.ip == m.ip);
+        let label = saved
+            .map(|s| s.label.clone())
+            .filter(|l| !l.is_empty())
+            .or_else(|| (!m.hostname.is_empty()).then(|| m.hostname.clone()));
+        let coin = saved.map(|s| s.coin_id.clone());
+
+        miners_json.push(serde_json::json!({
+            "minerType": "asic",
+            "minerId": m.ip,
+            "label": label,
+            "coin": coin,
+            "online": m.online,
+            "hashrate": m.rt_hashrate,
+            "state": {
+                "model": m.model,
+                "manufacturer": m.manufacturer,
+                "firmware": m.firmware,
+                "hashrateUnit": m.hashrate_unit,
+                "runtimeSecs": m.runtime_secs,
+                "hwErrors": m.hw_errors,
+            }
+        }));
+    }
+
+    // Mobile miners — minerId keyed on the device_id assigned at registration.
+    for mm in mobile_miners {
+        miners_json.push(serde_json::json!({
+            "minerType": "mobile",
+            "minerId": mm.device_id,
+            "label": (!mm.name.is_empty()).then(|| mm.name.clone()),
+            "coin": (!mm.coin.is_empty()).then(|| mm.coin.clone()),
+            "online": mm.is_online,
+            "hashrate": mm.hashrate_hs,
+            "state": {
+                "model": mm.model,
+                "manufacturer": mm.manufacturer,
+                "throttleState": mm.throttle_state,
+                "cpuTemp": mm.cpu_temp,
+                "batteryLevel": mm.battery_level,
+                "batteryCharging": mm.battery_charging,
+                "runtimeSeconds": mm.runtime_seconds,
+            }
+        }));
+    }
+
+    // PoPMiner ESP32 devices — minerId keyed on MAC (stable, what discovery
+    // already uses as the map key).
+    for d in popminer_devices {
+        miners_json.push(serde_json::json!({
+            "minerType": "popminer",
+            "minerId": d.mac,
+            "label": (!d.name.is_empty()).then(|| d.name.clone()),
+            "coin": serde_json::Value::Null,
+            "online": d.online,
+            "hashrate": d.hashrate,
+            "state": {
+                "model": d.model,
+                "firmware": d.fw,
+                "pool": d.pool,
+                "uptimeSecs": d.uptime_s,
+                "accepted": d.accepted,
+                "rejected": d.rejected,
+                "mining": d.mining,
+            }
+        }));
+    }
+
+    if miners_json.is_empty() {
+        // Nothing to push this cycle (no miners configured). Don't overwrite
+        // the staged payload with an empty list — the API would happily store
+        // count=0, but there's no value in round-tripping that.
+        return;
+    }
+
+    let payload = serde_json::json!({ "miners": miners_json });
+    *cloud_state.latest_miners.lock().unwrap() = Some(payload.clone());
+    log::info!("Cloud: miners staged for sync ({} entries)", miners_json.len());
 }
 
 // ─── Helpers shared across tasks ────────────────────────────────────────────
