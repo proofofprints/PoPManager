@@ -97,7 +97,7 @@ export default function Sidebar() {
             <line x1="18" y1="9" x2="22" y2="9" />
             <line x1="18" y1="15" x2="22" y2="15" />
           </svg>
-          OverMiner Devices
+          OverMiner
         </NavLink>
 
         <NavLink
