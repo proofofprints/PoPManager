@@ -2,7 +2,7 @@
 
 **Open-source, cross-platform miner management software for ASIC and mobile miners**
 
-Built by [Proof of Prints](https://proofofprints.com) | [Support: support@proofofprints.com](mailto:support@proofofprints.com)
+Built by [Proof of Prints](https://proofofprints.com) | [Support: support@overbuildlabs.com](mailto:support@overbuildlabs.com)
 
 ## Overview
 
@@ -239,5 +239,5 @@ Contributions welcome! If you have a miner model not currently supported, please
 ## Contact
 
 - **Website:** [proofofprints.com](https://proofofprints.com)
-- **Email:** [support@proofofprints.com](mailto:support@proofofprints.com)
+- **Email:** [support@overbuildlabs.com](mailto:support@overbuildlabs.com)
 - **GitHub:** [github.com/proofofprints/PoPManager](https://github.com/proofofprints/PoPManager)

@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in PoPManager, **please do not open a public GitHub issue.** Instead, report it privately via email:
 
-**Email:** [support@proofofprints.com](mailto:support@proofofprints.com)
+**Email:** [support@overbuildlabs.com](mailto:support@overbuildlabs.com)
 
 Include:
 - A description of the vulnerability

@@ -151,7 +151,7 @@ To set expectations — these are currently out of scope:
 ## Questions?
 
 - Open a [GitHub Discussion](https://github.com/proofofprints/PoPManager/discussions) or issue
-- Email: [support@proofofprints.com](mailto:support@proofofprints.com)
+- Email: [support@overbuildlabs.com](mailto:support@overbuildlabs.com)
 
 ## License
 

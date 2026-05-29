@@ -740,10 +740,10 @@ export default function Settings() {
             <div className="flex justify-between">
               <span className="text-slate-500">Support</span>
               <a
-                href="mailto:support@proofofprints.com"
+                href="mailto:support@overbuildlabs.com"
                 className="text-primary-400 hover:text-primary-300 transition-colors"
               >
-                support@proofofprints.com
+                support@overbuildlabs.com
               </a>
             </div>
             <div className="flex justify-between">

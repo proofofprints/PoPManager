@@ -20,7 +20,7 @@ PoPManager is an open and welcoming project. We are committed to making particip
 
 ## Enforcement
 
-Instances of unacceptable behavior may be reported to [support@proofofprints.com](mailto:support@proofofprints.com). All reports will be reviewed and may result in a response deemed appropriate to the circumstances, including warnings or permanent bans from the project.
+Instances of unacceptable behavior may be reported to [support@overbuildlabs.com](mailto:support@overbuildlabs.com). All reports will be reviewed and may result in a response deemed appropriate to the circumstances, including warnings or permanent bans from the project.
 
 ## Scope
 

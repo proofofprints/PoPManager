@@ -117,23 +117,11 @@ fn within_startup_grace() -> (bool, u64) {
 }
 
 fn rules_path() -> PathBuf {
-    let base = dirs::data_local_dir().unwrap_or_else(|| {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from("."))
-    });
-    base.join("PoPManager").join("alert_rules.json")
+    crate::paths::app_data_root().join("alert_rules.json")
 }
 
 fn history_path() -> PathBuf {
-    let base = dirs::data_local_dir().unwrap_or_else(|| {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from("."))
-    });
-    base.join("PoPManager").join("alert_history.json")
+    crate::paths::app_data_root().join("alert_history.json")
 }
 
 fn load_rules() -> Vec<AlertRule> {

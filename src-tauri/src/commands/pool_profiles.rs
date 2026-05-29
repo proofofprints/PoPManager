@@ -26,13 +26,7 @@ fn default_pool_fee() -> f64 { 1.0 }
 fn default_coin_id() -> String { String::from("kaspa") }
 
 fn profiles_path() -> PathBuf {
-    let base = dirs::data_local_dir().unwrap_or_else(|| {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from("."))
-    });
-    base.join("PoPManager").join("pool_profiles.json")
+    crate::paths::app_data_root().join("pool_profiles.json")
 }
 
 fn load_profiles() -> Vec<PoolProfile> {

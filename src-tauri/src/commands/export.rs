@@ -13,13 +13,7 @@ fn csv_row(fields: &[&str]) -> String {
 }
 
 fn storage_path(name: &str) -> std::path::PathBuf {
-    let base = dirs::data_local_dir().unwrap_or_else(|| {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-    });
-    base.join("PoPManager").join(name)
+    crate::paths::app_data_root().join(name)
 }
 
 fn app_data_path(app: &tauri::AppHandle, name: &str) -> Result<std::path::PathBuf, String> {

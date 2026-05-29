@@ -2,13 +2,7 @@ use rusqlite::{params, Connection};
 use std::path::PathBuf;
 
 fn queue_db_path() -> PathBuf {
-    let base = dirs::data_local_dir().unwrap_or_else(|| {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from("."))
-    });
-    base.join("PoPManager").join("cloud_queue.db")
+    crate::paths::app_data_root().join("cloud_queue.db")
 }
 
 pub fn open_queue() -> Result<Connection, String> {
