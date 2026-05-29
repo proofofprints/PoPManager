@@ -120,7 +120,7 @@ function PoolFormFields({
           value={form.name}
           onChange={(e) => onChange("name", e.target.value)}
           className="w-full bg-dark-900 border border-slate-600 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
-          placeholder="e.g. Proof of Prints Main"
+          placeholder="e.g. OverBuild Labs Main"
         />
       </div>
 

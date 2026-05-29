@@ -1299,7 +1299,7 @@ export default function MobileMinerList() {
             No mobile miners registered yet
           </p>
           <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
-            Install PoPMobile on your Android device and point it to this PoPManager
+            Install OBMobile on your Android device and point it to this OBManager
             instance:
           </p>
           {serverUrl && (
@@ -1381,12 +1381,12 @@ export default function MobileMinerList() {
                 <li>
                   Queue a <code className="text-amber-400">set_config</code> command to clear pool URL, wallet, and worker
                 </li>
-                <li>Remove the device from PoPManager's local registry</li>
+                <li>Remove the device from OBManager's local registry</li>
               </ol>
               <p className="text-amber-400 text-xs border-l-2 border-amber-500/50 pl-3">
                 <strong>Note:</strong> The cleanup commands are only delivered if the device is currently online.
-                If the device is still configured to report to this PoPManager instance, it will re-register automatically
-                on its next report. To permanently remove it, first change or clear the server URL in the PoPMobile app.
+                If the device is still configured to report to this OBManager instance, it will re-register automatically
+                on its next report. To permanently remove it, first change or clear the server URL in the OBMobile app.
               </p>
             </div>
             {removeError && (
@@ -1431,7 +1431,7 @@ export default function MobileMinerList() {
               <ol className="list-decimal list-inside space-y-1 text-slate-400 text-xs">
                 <li>Queue a <code className="text-amber-400">stop</code> command</li>
                 <li>Queue a <code className="text-amber-400">set_config</code> command to clear pool URL, wallet, and worker</li>
-                <li>Remove the device from PoPManager's local registry</li>
+                <li>Remove the device from OBManager's local registry</li>
               </ol>
               {bulkRemoveTargets.length <= 10 && (
                 <ul className="text-xs text-slate-400 bg-dark-900 rounded-lg p-3 space-y-1 max-h-40 overflow-y-auto">
@@ -1443,7 +1443,7 @@ export default function MobileMinerList() {
                 </ul>
               )}
               <p className="text-amber-400 text-xs border-l-2 border-amber-500/50 pl-3">
-                <strong>Note:</strong> Cleanup commands are only delivered if each device is online. Devices still configured to report to this PoPManager instance will re-register on their next report. To permanently remove them, first change or clear the server URL in each PoPMobile app.
+                <strong>Note:</strong> Cleanup commands are only delivered if each device is online. Devices still configured to report to this OBManager instance will re-register on their next report. To permanently remove them, first change or clear the server URL in each OBMobile app.
               </p>
             </div>
             {bulkRemoveError && (

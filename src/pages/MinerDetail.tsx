@@ -414,7 +414,7 @@ export default function MinerDetail() {
             </div>
           </div>
           <p className="text-xs italic text-slate-500 mt-3">
-            Uptime tracked while PoPManager is running
+            Uptime tracked while OBManager is running
           </p>
         </div>
       )}
