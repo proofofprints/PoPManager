@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OBManager",
+  "productName": "OverManager",
   "version": "1.4.0",
   "identifier": "com.proofofprints.popmanager",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "OBManager",
+        "title": "OverManager",
         "width": 1200,
         "height": 800,
         "minWidth": 900,

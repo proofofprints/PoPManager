@@ -20,7 +20,7 @@ export default function PairingCodePanel({
   onClose,
   pollIntervalMs = 3000,
   title = "Pair a New Device",
-  subtitle = "In the OBMobile app, enter these values to register your device.",
+  subtitle = "In the OverMobile app, enter these values to register your device.",
 }: PairingCodePanelProps) {
   const [code, setCode] = useState<string>("");
   const [copiedUrl, setCopiedUrl] = useState(false);
@@ -145,7 +145,7 @@ export default function PairingCodePanel({
               />
             </div>
             <p className="text-xs text-slate-500">
-              Scan with OBMobile to auto-fill server URL and pairing code
+              Scan with OverMobile to auto-fill server URL and pairing code
             </p>
           </div>
         )}

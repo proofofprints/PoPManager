@@ -16,8 +16,8 @@ export default function Sidebar() {
     <aside className="w-64 bg-dark-900 border-r border-slate-700/50 flex flex-col">
       <div className="p-6 border-b border-slate-700/50">
         <div className="flex items-center gap-3">
-          <img src={popIcon} alt="OBManager" className="w-8 h-8" />
-          <h1 className="text-xl font-bold text-white">OBManager</h1>
+          <img src={popIcon} alt="OverManager" className="w-8 h-8" />
+          <h1 className="text-xl font-bold text-white">OverManager</h1>
         </div>
       </div>
       <nav className="flex-1 p-4 space-y-1">
@@ -97,7 +97,7 @@ export default function Sidebar() {
             <line x1="18" y1="9" x2="22" y2="9" />
             <line x1="18" y1="15" x2="22" y2="15" />
           </svg>
-          OBMiner Devices
+          OverMiner Devices
         </NavLink>
 
         <NavLink

@@ -1,8 +1,8 @@
-# Handoff: OBManager data-dir migration (deferred from v1.4.0 rebrand)
+# Handoff: OverManager data-dir migration (deferred from v1.4.0 rebrand)
 
 ## Context
 
-v1.4.0 rebranded PoPManager → OBManager (OverBuild Labs) on all user-visible
+v1.4.0 rebranded PoPManager → OverManager (OverBuild Labs) on all user-visible
 surfaces, but **intentionally kept two internal identifiers** so existing
 v1.3.0 installs auto-update with zero data loss:
 
@@ -16,13 +16,13 @@ v1.3.0 installs auto-update with zero data loss:
    mobile_miner_commands.json, popminer_devices.json, cloud_queue.db.
    Used via `base.join("PoPManager")` in 12 spots across `src-tauri/src/`.
 
-This doc covers migrating **#2 only** (the storage dir) to `…\OBManager\`,
+This doc covers migrating **#2 only** (the storage dir) to `…\OverManager\`,
 if/when desired. **#1 stays.**
 
 ## Is this even worth doing?
 
 The storage dir lives under `%LOCALAPPDATA%` — invisible to normal users.
-Renaming `…\PoPManager\` → `…\OBManager\` is purely cosmetic for anyone who
+Renaming `…\PoPManager\` → `…\OverManager\` is purely cosmetic for anyone who
 browses AppData. It carries migration risk (data loss if the copy is buggy)
 for low user-visible benefit. **Recommendation: only do this if you want the
 on-disk footprint to fully match the brand. Otherwise leave it — it's a
@@ -41,7 +41,7 @@ New module `src-tauri/src/migrate.rs`, called early in the `lib.rs` setup hook
 pub fn migrate_data_dir() {
     let base = dirs::data_local_dir().unwrap_or_default();
     let old = base.join("PoPManager");
-    let new = base.join("OBManager");
+    let new = base.join("OverManager");
     // Idempotent: only migrate if new doesn't exist yet and old does.
     if new.exists() || !old.exists() {
         return;
@@ -51,7 +51,7 @@ pub fn migrate_data_dir() {
         log::error!("Data-dir migration failed: {} — falling back to old dir", e);
         return; // storage.rs should fall back to old path if new is absent
     }
-    log::info!("Migrated data dir PoPManager -> OBManager");
+    log::info!("Migrated data dir PoPManager -> OverManager");
 }
 ```
 
@@ -67,7 +67,7 @@ Change the 12 `base.join("PoPManager")` call sites to a shared helper:
 // in a shared module
 pub fn app_data_root() -> PathBuf {
     let base = dirs::data_local_dir().unwrap_or_else(/* exe fallback */);
-    let new = base.join("OBManager");
+    let new = base.join("OverManager");
     if new.exists() { new } else { base.join("PoPManager") }
 }
 ```
@@ -89,12 +89,12 @@ separately.
 
 ## Test scenarios
 
-- [ ] Fresh install (no old dir): app creates `…\OBManager\` directly, works.
+- [ ] Fresh install (no old dir): app creates `…\OverManager\` directly, works.
 - [ ] Upgrade from v1.4.0 with existing `…\PoPManager\` data: on first v1.5.0
-      launch, data is copied to `…\OBManager\`, all miners/pools/alerts/coins
+      launch, data is copied to `…\OverManager\`, all miners/pools/alerts/coins
       load intact, `…\PoPManager\` remains as backup.
 - [ ] Second launch: migration is a no-op (new dir exists), no duplicate copy.
-- [ ] Simulated migration failure (make `…\OBManager\` unwritable): app logs
+- [ ] Simulated migration failure (make `…\OverManager\` unwritable): app logs
       the error and falls back to reading `…\PoPManager\` — no data loss.
 - [ ] Cloud queue (`cloud_queue.db`, SQLite) survives the copy and continues
       draining.

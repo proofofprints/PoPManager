@@ -156,7 +156,7 @@ async fn handle_register(
                 StatusCode::UNAUTHORIZED,
                 Json(json!({
                     "ok": false,
-                    "error": "Pairing code required. Get the current code from OBManager's Mobile Miners screen."
+                    "error": "Pairing code required. Get the current code from OverManager's Mobile Miners screen."
                 })),
             ));
         }

@@ -14,7 +14,7 @@ fn api_url(path: &str) -> String {
 fn http_client() -> Result<Client, String> {
     Client::builder()
         .timeout(std::time::Duration::from_secs(10))
-        .user_agent(format!("OBManager/{}", env!("CARGO_PKG_VERSION")))
+        .user_agent(format!("OverManager/{}", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))
 }

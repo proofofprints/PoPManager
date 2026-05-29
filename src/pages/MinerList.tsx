@@ -1504,7 +1504,7 @@ export default function MinerList() {
               Remove {removeTargetIps.length === 1 ? "this miner" : `${removeTargetIps.length} miners`}?
             </h3>
             <div className="text-sm text-slate-300 space-y-3 mb-5">
-              <p>Are you sure you want to remove the selected miner{removeTargetIps.length > 1 ? "s" : ""} from OBManager?</p>
+              <p>Are you sure you want to remove the selected miner{removeTargetIps.length > 1 ? "s" : ""} from OverManager?</p>
               {removeTargetIps.length <= 10 && (
                 <ul className="text-xs text-slate-400 bg-dark-900 rounded-lg p-3 space-y-1 max-h-40 overflow-y-auto">
                   {removeTargetIps.map((ip) => {
@@ -1524,7 +1524,7 @@ export default function MinerList() {
                 </p>
               )}
               <p className="text-amber-400 text-xs border-l-2 border-amber-500/50 pl-3">
-                This only removes the miners from OBManager's monitoring list. The physical miners themselves are not affected and will continue mining. You can re-add them later via Add Device.
+                This only removes the miners from OverManager's monitoring list. The physical miners themselves are not affected and will continue mining. You can re-add them later via Add Device.
               </p>
             </div>
             {removeError && (

@@ -584,7 +584,7 @@ export default function Settings() {
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-white">Updates</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Check for new releases of OBManager.
+              Check for new releases of OverManager.
             </p>
           </div>
           <div className="space-y-4">
@@ -625,7 +625,7 @@ export default function Settings() {
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-white">Mobile Miner Server</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Allow OBMobile Android app to push telemetry to OBManager over HTTP.
+              Allow OverMobile Android app to push telemetry to OverManager over HTTP.
             </p>
           </div>
           <div className="space-y-4">
@@ -701,7 +701,7 @@ export default function Settings() {
                   </button>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Windows Firewall may prompt to allow OBManager on this port.
+                  Windows Firewall may prompt to allow OverManager on this port.
                 </p>
               </div>
             )}
@@ -723,11 +723,11 @@ export default function Settings() {
           <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-700/50">
             <img
               src={obLogo}
-              alt="OBManager Logo"
+              alt="OverManager Logo"
               className="w-14 h-14 rounded-xl object-contain flex-shrink-0"
             />
             <div>
-              <h4 className="text-xl font-bold text-white">OBManager</h4>
+              <h4 className="text-xl font-bold text-white">OverManager</h4>
               <p className="text-xs text-slate-500 mt-0.5">Open-source ASIC miner management</p>
             </div>
           </div>
@@ -780,31 +780,31 @@ export default function Settings() {
                 <div>
                   <p className="text-slate-400 font-medium mb-1">No Warranty</p>
                   <p>
-                    OBManager is provided "AS IS", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and noninfringement. In no event shall the authors or copyright holders be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software or the use or other dealings in the software.
+                    OverManager is provided "AS IS", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and noninfringement. In no event shall the authors or copyright holders be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software or the use or other dealings in the software.
                   </p>
                 </div>
                 <div>
                   <p className="text-slate-400 font-medium mb-1">No Support Guarantee</p>
                   <p>
-                    OBManager is an open-source project maintained on a best-effort basis. No support, service level agreement, or uptime guarantee is provided. Bug reports and feature requests may be submitted through the project's GitHub repository, but the maintainers make no commitment to respond or resolve issues within any specific timeframe.
+                    OverManager is an open-source project maintained on a best-effort basis. No support, service level agreement, or uptime guarantee is provided. Bug reports and feature requests may be submitted through the project's GitHub repository, but the maintainers make no commitment to respond or resolve issues within any specific timeframe.
                   </p>
                 </div>
                 <div>
                   <p className="text-slate-400 font-medium mb-1">Use at Your Own Risk</p>
                   <p>
-                    Cryptocurrency mining carries inherent risks including but not limited to hardware damage, electrical hazards, financial loss, regulatory changes, and market volatility. OBManager provides monitoring and management tools only — it does not control hardware safety, electrical installation, or financial outcomes. Users are solely responsible for their mining operations, hardware configuration, electrical safety, regulatory compliance, tax obligations, and any financial consequences.
+                    Cryptocurrency mining carries inherent risks including but not limited to hardware damage, electrical hazards, financial loss, regulatory changes, and market volatility. OverManager provides monitoring and management tools only — it does not control hardware safety, electrical installation, or financial outcomes. Users are solely responsible for their mining operations, hardware configuration, electrical safety, regulatory compliance, tax obligations, and any financial consequences.
                   </p>
                 </div>
                 <div>
                   <p className="text-slate-400 font-medium mb-1">Third-Party Services</p>
                   <p>
-                    OBManager may communicate with third-party services including cryptocurrency price APIs, network statistics providers, and mining pools. The maintainers are not responsible for the availability, accuracy, terms of service, or privacy practices of any third-party service. Data displayed from external sources is provided on an "as is" basis with no guarantees of accuracy or timeliness.
+                    OverManager may communicate with third-party services including cryptocurrency price APIs, network statistics providers, and mining pools. The maintainers are not responsible for the availability, accuracy, terms of service, or privacy practices of any third-party service. Data displayed from external sources is provided on an "as is" basis with no guarantees of accuracy or timeliness.
                   </p>
                 </div>
                 <div>
                   <p className="text-slate-400 font-medium mb-1">Trademarks</p>
                   <p>
-                    "Iceriver," "Antminer," "Whatsminer," and other hardware model names referenced throughout this software are trademarks of their respective owners. Use of these names is solely for hardware identification purposes and does not imply endorsement or affiliation. OBManager is not affiliated with, sponsored by, or endorsed by any cryptocurrency project, hardware manufacturer, or mining pool mentioned within the software.
+                    "Iceriver," "Antminer," "Whatsminer," and other hardware model names referenced throughout this software are trademarks of their respective owners. Use of these names is solely for hardware identification purposes and does not imply endorsement or affiliation. OverManager is not affiliated with, sponsored by, or endorsed by any cryptocurrency project, hardware manufacturer, or mining pool mentioned within the software.
                   </p>
                 </div>
                 <div>

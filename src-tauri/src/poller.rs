@@ -571,7 +571,7 @@ async fn dispatch_notifications(app: &AppHandle, triggered: &[AlertEvent]) {
         }
 
         if event.notify_email {
-            let subject = format!("OBManager Alert: {}", event.rule_name);
+            let subject = format!("OverManager Alert: {}", event.rule_name);
             let body = format!(
                 "Miner: {} ({})\n\n{}\n\nTime: {}",
                 event.miner_label, event.miner_ip, event.message, event.timestamp
