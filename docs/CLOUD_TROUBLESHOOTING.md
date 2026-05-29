@@ -198,4 +198,4 @@ If you can't resolve an issue using this guide:
    - Your operating system
    - The error message or behavior you're seeing
    - Relevant log lines (redact your email/API key if present)
-3. **Email support** — [support@proofofprints.com](mailto:support@proofofprints.com) for account or billing issues
+3. **Email support** — [support@overbuildlabs.com](mailto:support@overbuildlabs.com) for account or billing issues
