@@ -1,6 +1,6 @@
 [package]
 name = "pop-manager"
-version = "1.4.0"
+version = "1.5.0"
 description = "OverManager - Open-source ASIC miner management by OverBuild Labs"
 authors = ["OverBuild Labs"]
 license = "MIT"
