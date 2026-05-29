@@ -359,7 +359,7 @@ export default function MobileMinerDetail() {
       <div className="bg-dark-800 rounded-xl border border-red-900/40 p-6 mt-6">
         <h3 className="text-lg font-semibold text-red-400 mb-1">Danger Zone</h3>
         <p className="text-xs text-slate-500 mb-4">
-          Remove this device from PoPManager. A cleanup sequence will be queued before deletion.
+          Remove this device from OBManager. A cleanup sequence will be queued before deletion.
         </p>
         <button
           onClick={() => { setRemoveError(null); setShowRemoveModal(true); }}
@@ -386,12 +386,12 @@ export default function MobileMinerDetail() {
                 <li>
                   Queue a <code className="text-amber-400">set_config</code> command to clear pool URL, wallet, and worker
                 </li>
-                <li>Remove the device from PoPManager's local registry</li>
+                <li>Remove the device from OBManager's local registry</li>
               </ol>
               <p className="text-amber-400 text-xs border-l-2 border-amber-500/50 pl-3">
                 <strong>Note:</strong> The cleanup commands are only delivered if the device is currently online.
-                If the device is still configured to report to this PoPManager instance, it will re-register automatically
-                on its next report. To permanently remove it, first change or clear the server URL in the PoPMobile app.
+                If the device is still configured to report to this OBManager instance, it will re-register automatically
+                on its next report. To permanently remove it, first change or clear the server URL in the OBMobile app.
               </p>
             </div>
             {removeError && (

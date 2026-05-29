@@ -105,9 +105,9 @@ pub async fn test_smtp_config() -> Result<String, String> {
     let email = Message::builder()
         .from(config.from_address.parse().map_err(|e: lettre::address::AddressError| e.to_string())?)
         .to(to.parse().map_err(|e: lettre::address::AddressError| e.to_string())?)
-        .subject("PoPManager Test Email")
+        .subject("OBManager Test Email")
         .header(ContentType::TEXT_PLAIN)
-        .body("This is a test email from PoPManager. Your alert notifications are configured correctly.".to_string())
+        .body("This is a test email from OBManager. Your alert notifications are configured correctly.".to_string())
         .map_err(|e| e.to_string())?;
     do_send(&config, email).await.map_err(|e| {
         log::error!("Test email send failed: {}", e);

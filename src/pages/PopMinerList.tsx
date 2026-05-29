@@ -538,7 +538,7 @@ function AddDevicePanel({
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-sm font-semibold text-white">
-            Discovered PoPMiner Devices
+            Discovered OBMiner Devices
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
             Devices found on your local network via mDNS. Click "Add" to start
@@ -583,7 +583,7 @@ function AddDevicePanel({
             </svg>
           </div>
           <p className="text-sm text-slate-400">
-            No PoPMiner devices found on your network.
+            No OBMiner devices found on your network.
           </p>
           <p className="text-xs text-slate-500 mt-1">
             Make sure your device is powered on and connected to the same LAN.
@@ -680,7 +680,7 @@ export default function PopMinerList() {
       for (const d of list) map.set(d.mac, d);
       setDevices(map);
     } catch (err) {
-      console.error("Failed to load PoPMiner devices:", err);
+      console.error("Failed to load OBMiner devices:", err);
     } finally {
       setLoading(false);
     }
@@ -845,9 +845,9 @@ export default function PopMinerList() {
       {/* Header */}
       <div className="mb-6 flex items-end justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">PoPMiner Devices</h2>
+          <h2 className="text-2xl font-bold text-white">OBMiner Devices</h2>
           <p className="text-slate-400 mt-1">
-            PoPMiner hardware devices on your local network
+            OBMiner hardware devices on your local network
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -1018,11 +1018,11 @@ export default function PopMinerList() {
         <div className="text-center py-20">
           <MicrochipIcon className="w-16 h-16 mx-auto mb-4 text-slate-600" />
           <p className="text-lg font-medium text-slate-300">
-            No PoPMiner devices added
+            No OBMiner devices added
           </p>
           <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
-            Click "Add Device" above to discover PoPMiner devices on your
-            network. Make sure your PoPMiner Nano (or other PoPMiner device) is
+            Click "Add Device" above to discover OBMiner devices on your
+            network. Make sure your OBMiner Nano (or other OBMiner device) is
             powered on and connected to the same LAN.
           </p>
         </div>
@@ -1083,7 +1083,7 @@ export default function PopMinerList() {
             </h3>
             <div className="text-sm text-slate-300 space-y-3 mb-5">
               <p>
-                Are you sure you want to remove this PoPMiner device? It will no
+                Are you sure you want to remove this OBMiner device? It will no
                 longer appear in your device list.
               </p>
               <p className="text-xs text-slate-500">

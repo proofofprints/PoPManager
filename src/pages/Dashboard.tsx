@@ -495,9 +495,9 @@ export default function Dashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
               </svg>
             </div>
-            <h3 className="text-2xl font-bold text-white mb-2">Welcome to PoPManager</h3>
+            <h3 className="text-2xl font-bold text-white mb-2">Welcome to OBManager</h3>
             <p className="text-sm text-slate-400 mb-8 leading-relaxed">
-              Get started by adding your first miner. PoPManager supports Iceriver, Whatsminer, and Antminer ASICs via automatic network discovery, plus mobile miners running the PoPMobile Android app.
+              Get started by adding your first miner. OBManager supports Iceriver, Whatsminer, and Antminer ASICs via automatic network discovery, plus mobile miners running the OBMobile Android app.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -520,7 +520,7 @@ export default function Dashboard() {
               </button>
             </div>
             <p className="text-xs text-slate-500 mt-6">
-              New to PoPManager? See the <button onClick={() => navigate("/settings")} className="text-primary-400 hover:text-primary-300 underline">Settings → About</button> panel for the GitHub link and documentation.
+              New to OBManager? See the <button onClick={() => navigate("/settings")} className="text-primary-400 hover:text-primary-300 underline">Settings → About</button> panel for the GitHub link and documentation.
             </p>
           </div>
         </div>
@@ -544,7 +544,7 @@ export default function Dashboard() {
           subline={`${onlineMobileCount} online`}
         />
         <StatCard
-          label="PoPMiner Devices"
+          label="OBMiner Devices"
           value={popMinerCount}
           subline={`${onlinePopMinerCount} online`}
         />
@@ -567,7 +567,7 @@ export default function Dashboard() {
           value={formatMobileHashrate(mobileHashrateHs)}
         />
         <StatCard
-          label="PoPMiner Hashrate"
+          label="OBMiner Hashrate"
           value={formatMobileHashrate(popMinerHashrateHs)}
         />
         <StatCard
@@ -579,7 +579,7 @@ export default function Dashboard() {
 
       {fleetUptime !== null && (
         <p className="text-xs italic text-slate-500 -mt-4 mb-2">
-          Uptime tracked while PoPManager is running
+          Uptime tracked while OBManager is running
         </p>
       )}
 
