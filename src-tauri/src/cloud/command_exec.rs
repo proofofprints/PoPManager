@@ -47,7 +47,7 @@ pub async fn execute_command(
     match cmd.target_type.as_str() {
         "mobile" => execute_mobile_command(cmd, app_handle).await,
         "asic" => execute_asic_command(cmd, app_handle).await,
-        "popminer" => CommandResult::fail("PoPMiner remote control not yet supported"),
+        "popminer" => CommandResult::fail("OBMiner remote control not yet supported"),
         other => CommandResult::fail(format!("Unknown target type: {}", other)),
     }
 }
