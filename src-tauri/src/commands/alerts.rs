@@ -254,7 +254,7 @@ fn default_rules() -> Vec<AlertRule> {
         },
         AlertRule {
             id: format!("{}-8", now_hex),
-            name: "Mobile Miner Offline".to_string(),
+            name: "OverMobile Offline".to_string(),
             enabled: true,
             rule_type: RuleType::MobileOffline,
             threshold: 2.0,

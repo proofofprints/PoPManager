@@ -988,7 +988,7 @@ export default function MobileMinerList() {
       {/* Header */}
       <div className="mb-6 flex items-end justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Mobile Miners</h2>
+          <h2 className="text-2xl font-bold text-white">OverMobile</h2>
           <p className="text-slate-400 mt-1">
             Phones and tablets reporting telemetry to your local server
           </p>
@@ -1314,7 +1314,7 @@ export default function MobileMinerList() {
             </div>
           )}
           <p className="text-xs text-slate-600 mt-4">
-            See Settings → Mobile Miner Server to configure the listener.
+            See Settings → OverMobile Server to configure the listener.
           </p>
         </div>
       ) : filtered.length === 0 ? (

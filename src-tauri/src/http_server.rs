@@ -156,7 +156,7 @@ async fn handle_register(
                 StatusCode::UNAUTHORIZED,
                 Json(json!({
                     "ok": false,
-                    "error": "Pairing code required. Get the current code from OverManager's Mobile Miners screen."
+                    "error": "Pairing code required. Get the current code from OverManager's OverMobile screen."
                 })),
             ));
         }
@@ -168,7 +168,7 @@ async fn handle_register(
 
     let name = body
         .name
-        .unwrap_or_else(|| format!("Mobile Miner {}", &device_id[..8.min(device_id.len())]));
+        .unwrap_or_else(|| format!("OverMobile {}", &device_id[..8.min(device_id.len())]));
 
     let miner = MobileMiner {
         device_id: device_id.clone(),

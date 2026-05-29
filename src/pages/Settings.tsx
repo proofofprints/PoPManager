@@ -620,10 +620,10 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Mobile Miner Server */}
+        {/* OverMobile Server */}
         <div className="bg-dark-800 rounded-xl border border-slate-700/50 p-6">
           <div className="mb-5">
-            <h3 className="text-lg font-semibold text-white">Mobile Miner Server</h3>
+            <h3 className="text-lg font-semibold text-white">OverMobile Server</h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Allow OverMobile Android app to push telemetry to OverManager over HTTP.
             </p>

@@ -562,11 +562,11 @@ export default function Alerts() {
                       <option value="MinerOffline">Miner Offline</option>
                       <option value="NoShares">No Shares</option>
                     </optgroup>
-                    <optgroup label="Mobile Miners">
+                    <optgroup label="OverMobile">
                       <option value="MobileBatteryLow">Mobile Battery Low</option>
                       <option value="MobileCpuTempAbove">Mobile CPU Temp High</option>
                       <option value="MobileThrottle">Mobile Thermal Throttle</option>
-                      <option value="MobileOffline">Mobile Miner Offline</option>
+                      <option value="MobileOffline">OverMobile Offline</option>
                     </optgroup>
                   </select>
                 </div>

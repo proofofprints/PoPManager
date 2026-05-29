@@ -588,7 +588,7 @@ export default function Pools() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
-                  Push to Mobile Miners
+                  Push to OverMobile
                 </button>
               )}
               <button
@@ -774,7 +774,7 @@ export default function Pools() {
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <h3 className="text-lg font-semibold text-white">
-                    Push "{selectedProfile.name}" to Mobile Miners
+                    Push "{selectedProfile.name}" to OverMobile
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Queue a set_config command for each selected device. Changes apply on the device's next report.

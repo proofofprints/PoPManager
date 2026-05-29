@@ -138,7 +138,7 @@ export default function MobileMinerDetail() {
           onClick={() => navigate("/mobile-miners")}
           className="text-sm text-slate-400 hover:text-white mb-4"
         >
-          ← Back to Mobile Miners
+          ← Back to OverMobile
         </button>
         <p className="text-slate-400">Mobile miner not found.</p>
       </div>
@@ -153,7 +153,7 @@ export default function MobileMinerDetail() {
         onClick={() => navigate("/mobile-miners")}
         className="text-sm text-slate-400 hover:text-white mb-4"
       >
-        ← Back to Mobile Miners
+        ← Back to OverMobile
       </button>
 
       <div className="mb-6">
