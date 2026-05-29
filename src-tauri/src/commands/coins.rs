@@ -53,13 +53,7 @@ fn builtin_coins() -> Vec<CoinConfig> {
 }
 
 fn user_coins_path() -> PathBuf {
-    let base = dirs::data_local_dir().unwrap_or_else(|| {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from("."))
-    });
-    base.join("PoPManager").join("coins.json")
+    crate::paths::app_data_root().join("coins.json")
 }
 
 fn load_user_coins() -> Vec<CoinConfig> {

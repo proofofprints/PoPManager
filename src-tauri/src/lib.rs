@@ -3,6 +3,8 @@ mod cloud;
 mod commands;
 mod http_server;
 mod mdns;
+mod migrate;
+mod paths;
 mod poller;
 mod popminer_device;
 
@@ -69,6 +71,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
+            // One-time, idempotent data-dir migration (PoPManager -> OverManager).
+            // MUST run before any state loads so loaders read the migrated dir.
+            migrate::migrate_data_dir();
+
             #[cfg(target_os = "windows")]
             {
                 let identifier = app.config().identifier.clone();

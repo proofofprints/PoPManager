@@ -194,33 +194,15 @@ impl MobileCommandsState {
 // ─── File Paths ───────────────────────────────────────────────────────────────
 
 pub fn miners_path() -> PathBuf {
-    let base = dirs::data_local_dir().unwrap_or_else(|| {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from("."))
-    });
-    base.join("PoPManager").join("mobile_miners.json")
+    crate::paths::app_data_root().join("mobile_miners.json")
 }
 
 pub fn config_path() -> PathBuf {
-    let base = dirs::data_local_dir().unwrap_or_else(|| {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from("."))
-    });
-    base.join("PoPManager").join("mobile_server_config.json")
+    crate::paths::app_data_root().join("mobile_server_config.json")
 }
 
 pub fn commands_path() -> PathBuf {
-    let base = dirs::data_local_dir().unwrap_or_else(|| {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from("."))
-    });
-    base.join("PoPManager").join("mobile_miner_commands.json")
+    crate::paths::app_data_root().join("mobile_miner_commands.json")
 }
 
 // ─── I/O helpers ──────────────────────────────────────────────────────────────
