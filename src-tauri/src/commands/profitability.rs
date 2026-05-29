@@ -73,7 +73,7 @@ struct CoinGeckoResponse {
 
 fn make_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .user_agent("PoPManager/0.1.0")
+        .user_agent("OBManager/0.1.0")
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))

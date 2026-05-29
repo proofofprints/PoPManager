@@ -72,7 +72,7 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 let identifier = app.config().identifier.clone();
-                commands::notifications::setup_windows_aumid(&identifier, "PoPManager");
+                commands::notifications::setup_windows_aumid(&identifier, "OBManager");
             }
 
             // Load preferences and initialise managed tray state.
@@ -210,21 +210,21 @@ pub fn run() {
             }
 
             // Build the system tray menu.
-            let show = MenuItem::with_id(app, "show", "Open PoPManager", true, None::<&str>)?;
+            let show = MenuItem::with_id(app, "show", "Open OBManager", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
 
             TrayIconBuilder::with_id("main-tray")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .tooltip("PoPManager - Mining Manager")
+                .tooltip("OBManager - Mining Manager")
                 .on_menu_event(|app: &tauri::AppHandle, event: tauri::menu::MenuEvent| {
                     match event.id.as_ref() {
                         "show" => {
                             if let Some(window) = app.get_webview_window("main") {
                                 let _ = window.show();
                                 let _ = window.set_focus();
-                                log::info!("Restoring PoPManager from system tray");
+                                log::info!("Restoring OBManager from system tray");
                             }
                         }
                         "quit" => {
@@ -244,7 +244,7 @@ pub fn run() {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
-                            log::info!("Restoring PoPManager from system tray (click)");
+                            log::info!("Restoring OBManager from system tray (click)");
                         }
                     }
                 })
@@ -261,7 +261,7 @@ pub fn run() {
                         if minimize {
                             api.prevent_close();
                             if let Some(win) = app_handle.get_webview_window("main") {
-                                log::info!("Minimizing PoPManager to system tray");
+                                log::info!("Minimizing OBManager to system tray");
                                 let _ = win.hide();
                             }
                         }
