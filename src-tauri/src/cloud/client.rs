@@ -1,11 +1,17 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-// The cloud API runs at cloud-api.proofofprints.com. The bare `cloud.`
-// subdomain now hosts the web portal (Cloudflare static assets) and will
-// return 405 Method Not Allowed for any POST that hits it. Don't put the
-// portal URL here — it's a different host with no API routes.
-const CLOUD_API_URL: &str = "https://cloud-api.proofofprints.com";
+// The cloud API runs at cloud-api.overbuildlabs.com. The portal lives on
+// the bare `cloud.` subdomain (Cloudflare static assets) and will return
+// 405 Method Not Allowed for any POST that hits it. Don't put the portal
+// URL here — it's a different host with no API routes.
+//
+// Rebrand 2026-05-22: canonical host moved from cloud-api.proofofprints.com
+// → cloud-api.overbuildlabs.com. The old hostname is still served by the
+// same Caddy site block (both names point at the same Node service) so
+// existing installs on previous builds keep working — but new builds
+// canonicalize on the OverBuild Labs domain.
+const CLOUD_API_URL: &str = "https://cloud-api.overbuildlabs.com";
 
 fn api_url(path: &str) -> String {
     format!("{}{}", CLOUD_API_URL, path)
