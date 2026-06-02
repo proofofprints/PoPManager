@@ -224,7 +224,7 @@ export default function MobileMinerDetail() {
               value={poolUrl}
               onChange={(e) => setPoolUrl(e.target.value)}
               className="w-full bg-dark-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
-              placeholder="stratum+tcp://pool.proofofprints.com:5558"
+              placeholder="stratum+tcp://pool.overbuildlabs.com:5558"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
