@@ -25,7 +25,7 @@
   },
   "plugins": {
     "updater": {
-      "endpoints": ["https://github.com/proofofprints/PoPManager/releases/latest/download/latest.json"],
+      "endpoints": ["https://github.com/overbuildlabs/OverManager/releases/latest/download/latest.json"],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY2N0MzODRGQUE5QzhFMDQKUldRRWpweXFUemg4OWlOMGdxeUZ0cmxqbWMremUrTnI2ZlRsbCtWR1I3LzdCckJBUFZHZGN0UTAK"
     }
   },

@@ -1,13 +1,13 @@
 # Cloud Sync — Technical Architecture
 
-Internal reference for developers working on PoPManager's cloud integration. For user-facing docs see [CLOUD_SYNC.md](./CLOUD_SYNC.md).
+Internal reference for developers working on OverManager's cloud integration. For user-facing docs see [CLOUD_SYNC.md](./CLOUD_SYNC.md).
 
 ## Overview
 
-PoPManager Cloud Sync is an opt-in feature that connects the desktop app to PoPCloud (cloud.proofofprints.com). Data flows outbound from the desktop to the cloud via REST pushes and a persistent WebSocket for receiving remote commands.
+OverManager Cloud Sync is an opt-in feature that connects the desktop app to OverCloud (cloud.overbuildlabs.com). Data flows outbound from the desktop to the cloud via REST pushes and a persistent WebSocket for receiving remote commands.
 
 ```
-PoPManager Desktop                          PoPCloud API
+OverManager Desktop                          OverCloud API
 ┌──────────────────┐                    ┌──────────────────┐
 │                  │  POST /ingest/*    │                  │
 │  sync.rs ────────│───────────────────>│  Fastify +       │
@@ -117,7 +117,7 @@ CREATE TABLE cloud_sync_queue (
 );
 ```
 
-Stored in `%LOCALAPPDATA%/PoPManager/cloud_queue.db` (SQLite with WAL mode).
+Stored in `%LOCALAPPDATA%/OverManager/cloud_queue.db` (SQLite with WAL mode).
 
 ### Retry policy
 
@@ -175,7 +175,7 @@ Commands arrive via WebSocket as:
 }}
 ```
 
-`command_exec.rs` maps this to existing PoPManager functions:
+`command_exec.rs` maps this to existing OverManager functions:
 
 | targetType | commandType | Calls |
 |---|---|---|
@@ -223,7 +223,7 @@ Positioned between Preferences and Email Configuration sections.
 - Email input
 - Password input
 - "Sign In" button
-- "Don't have an account? Sign up at cloud.proofofprints.com" link
+- "Don't have an account? Sign up at cloud.overbuildlabs.com" link
 
 **Signed in state:**
 - Status indicator: green dot "Connected" / yellow "Syncing" / red "Disconnected"

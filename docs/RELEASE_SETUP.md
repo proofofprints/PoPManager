@@ -1,4 +1,4 @@
-# PoPManager Release Setup Guide
+# OverManager Release Setup Guide
 
 ## One-Time Setup: Signing Keys
 
@@ -47,12 +47,12 @@ npm run tauri build
 ```
 
 This creates:
-- `src-tauri/target/release/bundle/msi/PoPManager_x.x.x_x64_en-US.msi` — Windows installer
-- `src-tauri/target/release/bundle/msi/PoPManager_x.x.x_x64_en-US.msi.sig` — Update signature
+- `src-tauri/target/release/bundle/msi/OverManager_x.x.x_x64_en-US.msi` — Windows installer
+- `src-tauri/target/release/bundle/msi/OverManager_x.x.x_x64_en-US.msi.sig` — Update signature
 
 ### 3. Create GitHub Release
 
-1. Go to https://github.com/proofofprints/PoPManager/releases/new
+1. Go to https://github.com/overbuildlabs/OverManager/releases/new
 2. Create a new tag (e.g., `v0.2.0`)
 3. Upload the MSI file
 4. Upload the `.msi.sig` signature file
@@ -66,7 +66,7 @@ This creates:
   "platforms": {
     "windows-x86_64": {
       "signature": "<contents of the .msi.sig file>",
-      "url": "https://github.com/proofofprints/PoPManager/releases/download/v0.2.0/PoPManager_0.2.0_x64_en-US.msi"
+      "url": "https://github.com/overbuildlabs/OverManager/releases/download/v0.2.0/OverManager_0.2.0_x64_en-US.msi"
     }
   }
 }

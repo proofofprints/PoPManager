@@ -2,7 +2,7 @@
 
 **Open-source, cross-platform miner management software for ASIC and mobile miners**
 
-Built by [OverBuild Labs](https://proofofprints.com) | [Support: support@overbuildlabs.com](mailto:support@overbuildlabs.com)
+Built by [OverBuild Labs](https://overbuildlabs.com) | [Support: support@overbuildlabs.com](mailto:support@overbuildlabs.com)
 
 ## Overview
 
@@ -107,7 +107,7 @@ OverManager includes an embedded HTTP server that receives push-based telemetry 
 - Historical farm data with auto-pruning (7-day retention)
 - Troubleshooting logs with configurable log levels
 
-### Cloud Sync *(PoPCloud — $5/month)*
+### Cloud Sync *(OverCloud — $5/month)*
 - **Remote monitoring** — view your farm from anywhere via the web portal or companion app
 - **Push notifications** — get alerts on your phone when miners go offline, overheat, or stop submitting shares
 - **Remote commands** — start, stop, restart miners and push pool configurations from your phone or browser
@@ -134,11 +134,11 @@ See [docs/CLOUD_SYNC.md](docs/CLOUD_SYNC.md) for setup guide and [docs/CLOUD_TRO
 - Reports telemetry every 30 seconds: hashrate, CPU temp, battery, throttle state, pool stats
 - Works offline — queued commands are delivered on reconnect
 
-The app is currently in development. Follow the [GitHub repo](https://github.com/proofofprints/PoPManager) for release announcements.
+The app is currently in development. Follow the [GitHub repo](https://github.com/overbuildlabs/OverManager) for release announcements.
 
 ## Installation
 
-Download the latest installer for your platform from [Releases](https://github.com/proofofprints/PoPManager/releases):
+Download the latest installer for your platform from [Releases](https://github.com/overbuildlabs/OverManager/releases):
 
 | Platform | Format | Notes |
 |---|---|---|
@@ -147,7 +147,7 @@ Download the latest installer for your platform from [Releases](https://github.c
 | **macOS** (Intel) | `.dmg` (x64) | Community-tested. |
 | **Linux** (x64) | `.deb` or `.AppImage` | Community-tested. Requires `webkit2gtk 4.1` and related system libraries. |
 
-> **Note:** Windows is the primary development and testing platform. macOS and Linux builds are provided and should work, but have not been as extensively tested. Please [open an issue](https://github.com/proofofprints/PoPManager/issues) if you encounter platform-specific problems.
+> **Note:** Windows is the primary development and testing platform. macOS and Linux builds are provided and should work, but have not been as extensively tested. Please [open an issue](https://github.com/overbuildlabs/OverManager/issues) if you encounter platform-specific problems.
 
 ### Building from Source
 
@@ -157,8 +157,8 @@ Prerequisites:
 - [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/) (Windows, with C++ workload)
 
 ```bash
-git clone https://github.com/proofofprints/PoPManager.git
-cd PoPManager
+git clone https://github.com/overbuildlabs/OverManager.git
+cd OverManager
 npm install
 npm run tauri dev
 ```
@@ -205,7 +205,7 @@ See [docs/SUPPORTED_MINERS.md](docs/SUPPORTED_MINERS.md) for the full list of su
 
 All configuration is stored locally on your machine. On Windows, data is split across two locations:
 
-**App data (`%LOCALAPPDATA%\PoPManager\`)** — most operational state:
+**App data (`%LOCALAPPDATA%\OverManager\`)** — most operational state:
 - `miners.json` — saved ASIC miners
 - `mobile_miners.json` — registered mobile miners
 - `mobile_miner_commands.json` — pending remote commands
@@ -238,6 +238,6 @@ Contributions welcome! If you have a miner model not currently supported, please
 
 ## Contact
 
-- **Website:** [proofofprints.com](https://proofofprints.com)
+- **Website:** [overbuildlabs.com](https://overbuildlabs.com)
 - **Email:** [support@overbuildlabs.com](mailto:support@overbuildlabs.com)
-- **GitHub:** [github.com/proofofprints/PoPManager](https://github.com/proofofprints/PoPManager)
+- **GitHub:** [github.com/overbuildlabs/OverManager](https://github.com/overbuildlabs/OverManager)

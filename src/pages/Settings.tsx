@@ -757,10 +757,10 @@ export default function Settings() {
             <div className="flex justify-between items-center pt-1">
               <span className="text-slate-500">GitHub</span>
               <button
-                onClick={() => openUrl("https://github.com/proofofprints/PoPManager")}
+                onClick={() => openUrl("https://github.com/overbuildlabs/OverManager")}
                 className="text-primary-400 hover:text-primary-300 transition-colors text-sm"
               >
-                github.com/proofofprints/PoPManager
+                github.com/overbuildlabs/OverManager
               </button>
             </div>
           </div>

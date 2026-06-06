@@ -1,6 +1,6 @@
-# Adding a New Coin to PoPManager
+# Adding a New Coin to OverManager
 
-Fill out this template and give it to Claude (or a developer) to implement support for a new cryptocurrency in PoPManager.
+Fill out this template and give it to Claude (or a developer) to implement support for a new cryptocurrency in OverManager.
 
 ---
 

@@ -1,6 +1,6 @@
-# PoPManager Cloud Sync
+# OverManager Cloud Sync
 
-Connect your PoPManager desktop app to PoPCloud for remote monitoring, push notifications, and remote miner control from anywhere.
+Connect your OverManager desktop app to OverCloud for remote monitoring, push notifications, and remote miner control from anywhere.
 
 ## What Cloud Sync Does
 
@@ -12,16 +12,16 @@ Connect your PoPManager desktop app to PoPCloud for remote monitoring, push noti
 | Push notifications to phone | No | Yes |
 | Remote monitoring from anywhere | No | Yes |
 | Remote start/stop/config from phone | No | Yes |
-| Multiple PoPManager installations | N/A | Yes |
-| Web portal (cloud.proofofprints.com) | No | Yes |
+| Multiple OverManager installations | N/A | Yes |
+| Web portal (cloud.overbuildlabs.com) | No | Yes |
 | Companion app (iOS + Android) | No | Yes |
 | Ad-free desktop | Ads after 5 devices | Yes |
 
 ## Getting Started
 
-### 1. Create a PoPCloud account
+### 1. Create a OverCloud account
 
-Visit [cloud.proofofprints.com](https://cloud.proofofprints.com) and create an account. You'll need:
+Visit [cloud.overbuildlabs.com](https://cloud.overbuildlabs.com) and create an account. You'll need:
 - Email address
 - Password (minimum 8 characters)
 
@@ -31,15 +31,15 @@ Account creation is free. You can explore the web portal before subscribing.
 
 From the web portal, go to **Account → Subscription** and choose the Cloud Basic plan ($5/month). Payment is handled securely via Stripe.
 
-### 3. Connect PoPManager
+### 3. Connect OverManager
 
-In PoPManager desktop:
+In OverManager desktop:
 
 1. Open **Settings**
 2. Find the **Cloud Sync** section (near the top, below Preferences)
 3. Enter your email and password
 4. Click **Sign In**
-5. PoPManager will create an "instance" for this installation and begin syncing
+5. OverManager will create an "instance" for this installation and begin syncing
 
 You should see:
 - **Status:** Connected (green dot)
@@ -48,7 +48,7 @@ You should see:
 
 ### 4. Verify data is flowing
 
-After signing in, wait 60 seconds, then open [cloud.proofofprints.com](https://cloud.proofofprints.com) in your browser. You should see:
+After signing in, wait 60 seconds, then open [cloud.overbuildlabs.com](https://cloud.overbuildlabs.com) in your browser. You should see:
 - Your farm's current hashrate
 - Online/offline miner counts
 - The miners you have configured locally
@@ -57,29 +57,29 @@ After signing in, wait 60 seconds, then open [cloud.proofofprints.com](https://c
 
 ### Data flow
 
-PoPManager pushes three types of data to the cloud:
+OverManager pushes three types of data to the cloud:
 
 1. **Farm snapshots** (every 60 seconds) — total hashrate, online count, per-coin earnings
 2. **Miner states** (on change) — individual miner status, hashrate, temperature, pool info
 3. **Alert events** (when they fire) — offline alerts, temperature warnings, share alerts
 
-All data flows **outbound** from your desktop to the cloud. PoPManager never exposes any ports to the internet — it's always your app initiating the connection.
+All data flows **outbound** from your desktop to the cloud. OverManager never exposes any ports to the internet — it's always your app initiating the connection.
 
 ### Remote commands
 
 When you (or someone you authorize) sends a command from the web portal or companion app:
 
 1. The command is queued in the cloud
-2. PoPManager picks it up via a persistent WebSocket connection
-3. PoPManager executes it locally (same as clicking the button in the UI)
-4. PoPManager sends an acknowledgment back to the cloud
+2. OverManager picks it up via a persistent WebSocket connection
+3. OverManager executes it locally (same as clicking the button in the UI)
+4. OverManager sends an acknowledgment back to the cloud
 5. The web portal / companion app shows the result
 
-If PoPManager is offline when a command is queued, it will execute when PoPManager reconnects.
+If OverManager is offline when a command is queued, it will execute when OverManager reconnects.
 
 ### Offline behavior
 
-PoPManager continues working fully offline. When cloud connectivity is lost:
+OverManager continues working fully offline. When cloud connectivity is lost:
 
 - Local monitoring, alerts, and miner management continue normally
 - Snapshots and alerts are queued locally (stored in a SQLite database)
@@ -92,10 +92,10 @@ PoPManager continues working fully offline. When cloud connectivity is lost:
 
 | Field | Description |
 |---|---|
-| **Email** | Your PoPCloud account email |
-| **Password** | Your PoPCloud account password (only needed for initial login) |
+| **Email** | Your OverCloud account email |
+| **Password** | Your OverCloud account password (only needed for initial login) |
 | **Status** | Connection state: Connected / Disconnected / Syncing / Error |
-| **Instance Name** | A name for this PoPManager installation (e.g. "Home Farm", "Office Rig") — editable |
+| **Instance Name** | A name for this OverManager installation (e.g. "Home Farm", "Office Rig") — editable |
 | **Last Sync** | Timestamp of the last successful data push |
 | **Queue Size** | Number of pending items in the offline queue (only shown when > 0) |
 | **Sign Out** | Disconnects from cloud and removes stored credentials |
@@ -110,11 +110,11 @@ Your cloud credentials are stored securely in your operating system's native cre
 | macOS | macOS Keychain |
 | Linux | Secret Service (GNOME Keyring / KDE Wallet) |
 
-PoPManager never stores your password. After initial login, only an API key and a refresh token are stored. The refresh token expires after 30 days of inactivity — if you don't open PoPManager for 30+ days, you'll need to sign in again.
+OverManager never stores your password. After initial login, only an API key and a refresh token are stored. The refresh token expires after 30 days of inactivity — if you don't open OverManager for 30+ days, you'll need to sign in again.
 
 ## Multiple Instances
 
-One PoPCloud account can have multiple PoPManager installations connected. Each installation is a separate "instance" with its own name and API key.
+One OverCloud account can have multiple OverManager installations connected. Each installation is a separate "instance" with its own name and API key.
 
 Common use cases:
 - Home mining farm + hosted facility
@@ -135,10 +135,10 @@ If you cancel your subscription, your cloud data is retained for 30 days. After 
 
 ## Privacy & Security
 
-- **No miner credentials leave your machine.** PoPManager never sends miner passwords, wallet private keys, or pool credentials to the cloud. Only performance metrics (hashrate, temperature, share counts, pool URLs, uptime) are synced.
-- **All communication is encrypted.** PoPManager connects to the cloud over HTTPS (TLS 1.3) and WSS (WebSocket Secure).
+- **No miner credentials leave your machine.** OverManager never sends miner passwords, wallet private keys, or pool credentials to the cloud. Only performance metrics (hashrate, temperature, share counts, pool URLs, uptime) are synced.
+- **All communication is encrypted.** OverManager connects to the cloud over HTTPS (TLS 1.3) and WSS (WebSocket Secure).
 - **Your API key is unique to your installation.** It can be regenerated at any time from the web portal if you suspect it's been compromised.
-- **Remote commands are relayed, not executed by the cloud.** The cloud never connects to your miners directly — PoPManager desktop is always the execution layer.
+- **Remote commands are relayed, not executed by the cloud.** The cloud never connects to your miners directly — OverManager desktop is always the execution layer.
 
 ## Bandwidth Usage
 

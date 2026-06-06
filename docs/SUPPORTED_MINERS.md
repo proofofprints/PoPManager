@@ -1,4 +1,4 @@
-# PoPManager Supported Miners
+# OverManager Supported Miners
 
 ## Fully Supported
 
@@ -57,7 +57,7 @@ Coming soon. Read-only monitoring on stock firmware; full control with Braiins O
 
 ## Adding Support for New Miners
 
-PoPManager's modular architecture makes it straightforward to add support for new miner manufacturers. See [ADD_NEW_COIN.md](ADD_NEW_COIN.md) for adding new cryptocurrency support.
+OverManager's modular architecture makes it straightforward to add support for new miner manufacturers. See [ADD_NEW_COIN.md](ADD_NEW_COIN.md) for adding new cryptocurrency support.
 
 For adding a new miner manufacturer's API, the following is needed:
 1. API protocol documentation (HTTP REST, TCP/JSON, gRPC, etc.)
