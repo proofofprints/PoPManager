@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
+use tokio::sync::Notify;
 
 pub mod auth;
 pub mod client;
@@ -32,6 +33,9 @@ pub struct CloudState {
     pub queue_size: Mutex<u64>,         // number of pending items
     pub latest_snapshot: Mutex<Option<serde_json::Value>>,
     pub latest_miners: Mutex<Option<serde_json::Value>>,
+    /// Notified on login so the sync loop runs an immediate cycle instead of
+    /// waiting up to 60s for the next tick. Mirrors the poller's force_poll.
+    pub login_notify: Notify,
 }
 
 impl CloudState {
@@ -46,6 +50,7 @@ impl CloudState {
             queue_size: Mutex::new(0),
             latest_snapshot: Mutex::new(None),
             latest_miners: Mutex::new(None),
+            login_notify: Notify::new(),
         }
     }
 }
@@ -85,9 +90,11 @@ pub async fn cloud_login(
     auth::store_instance_id(&instance.id)?;
     auth::store_instance_name(&instance.name)?;
 
-    // 4. Update state
+    // 4. Update state. Mark Connecting (not Connected yet) so the UI reflects
+    //    that the first sync cycle is about to run; the sync loop flips it to
+    //    Syncing during the push and Connected on success.
     {
-        *state.status.lock().unwrap() = CloudSyncStatus::Connected;
+        *state.status.lock().unwrap() = CloudSyncStatus::Connecting;
         *state.email.lock().unwrap() = Some(email.clone());
         *state.instance_name.lock().unwrap() = Some(instance.name.clone());
         *state.instance_id.lock().unwrap() = Some(instance.id.clone());
@@ -119,6 +126,10 @@ pub async fn cloud_login(
             }
         }
     }
+
+    // 6. Wake the sync loop so it pushes now instead of waiting for the next
+    //    60s tick — gives the user immediate "Last sync" feedback after login.
+    state.login_notify.notify_one();
 
     Ok(cloud_status_from_state(&state))
 }
