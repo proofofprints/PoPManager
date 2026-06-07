@@ -14,7 +14,13 @@ pub async fn start_sync_loop(
     let mut cycle: u64 = 0;
 
     loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+        // Wait for the regular interval or an immediate-sync signal (login).
+        tokio::select! {
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(60)) => {}
+            _ = cloud_state.login_notify.notified() => {
+                log::info!("Cloud sync: immediate cycle triggered by login");
+            }
+        }
 
         // Check if logged in
         let api_key = {
@@ -38,6 +44,7 @@ pub async fn start_sync_loop(
 
         if let Some(payload) = snapshot {
             log::info!("Cloud sync: pushing snapshot to cloud");
+            *cloud_state.status.lock().unwrap() = CloudSyncStatus::Syncing;
             match client::push_snapshot(&api_key, &payload).await {
                 Ok(()) => {
                     let now_ms = chrono::Utc::now().timestamp_millis();
@@ -65,6 +72,7 @@ pub async fn start_sync_loop(
 
         if let Some(payload) = miners {
             log::info!("Cloud sync: pushing miner state to cloud");
+            *cloud_state.status.lock().unwrap() = CloudSyncStatus::Syncing;
             match client::push_miners(&api_key, &payload).await {
                 Ok(()) => {
                     let now_ms = chrono::Utc::now().timestamp_millis();
@@ -144,6 +152,15 @@ pub async fn start_sync_loop(
         // --- 4. Update queue size ---
         if let Ok(count) = queue::count() {
             *cloud_state.queue_size.lock().unwrap() = count;
+        }
+
+        // Settle the status: any leftover Connecting/Syncing (e.g. login with no
+        // data to push) resolves to Connected. Auth/Error states are preserved.
+        {
+            let mut st = cloud_state.status.lock().unwrap();
+            if matches!(*st, CloudSyncStatus::Connecting | CloudSyncStatus::Syncing) {
+                *st = CloudSyncStatus::Connected;
+            }
         }
 
         // --- 5. Periodic prune (every ~100 cycles ≈ 100 minutes) ---
