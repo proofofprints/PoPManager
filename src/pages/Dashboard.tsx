@@ -527,7 +527,7 @@ export default function Dashboard() {
       ) : (
         <>
       {/* Summary stats — Miners breakdown */}
-      <div className="grid grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
         <StatCard
           label="Total Miners"
           value={totalCount}
@@ -551,7 +551,7 @@ export default function Dashboard() {
       </div>
 
       {/* Hashrate breakdown + uptime */}
-      <div className="grid grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
         <StatCard
           label="Total Hashrate"
           value={totalHashrateGhs.toFixed(1)}
@@ -850,7 +850,7 @@ export default function Dashboard() {
                           )}
                         </div>
                       </div>
-                      <div className="grid grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div className="bg-dark-900 rounded-lg p-3">
                           <p className="text-xs text-slate-400 mb-1">Total Miners</p>
                           <p className="text-xl font-bold text-white">{count}</p>
@@ -870,7 +870,7 @@ export default function Dashboard() {
                           </p>
                         </div>
                       </div>
-                      <div className="grid grid-cols-4 gap-3 mt-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
                         <div className="bg-dark-900 rounded-lg p-3">
                           <p className="text-xs text-slate-400 mb-1">Hashrate</p>
                           <p className="text-xl font-bold text-white">{totalHashrate.toFixed(1)}</p>
