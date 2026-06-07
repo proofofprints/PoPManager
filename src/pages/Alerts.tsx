@@ -5,6 +5,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import type { AlertEvent, AlertRule, RuleType } from "../types/alerts";
 import type { SavedMiner, MobileMiner } from "../types/miner";
 import { useAlerts } from "../context/AlertContext";
+import NotificationBanner from "../components/NotificationBanner";
 
 // ─── Alert Rules helpers ──────────────────────────────────────────────────────
 
@@ -296,6 +297,8 @@ export default function Alerts() {
         <h2 className="text-2xl font-bold text-white">Alerts</h2>
         <p className="text-slate-400 mt-1">Monitor alert history and manage alert rules</p>
       </div>
+
+      <NotificationBanner />
 
       {/* Tab toggle */}
       <div className="flex items-center gap-1 mb-6 bg-dark-800 border border-slate-700/50 rounded-lg p-1 w-fit">

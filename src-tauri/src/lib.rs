@@ -34,7 +34,7 @@ use commands::alerts::{
 };
 use commands::coins::{get_coins, add_coin, remove_coin};
 use commands::email::{get_smtp_config, save_smtp_config, test_smtp_config, send_alert_email};
-use commands::notifications::send_desktop_notification;
+use commands::notifications::{send_desktop_notification, get_notification_status};
 use commands::mute::{get_muted_devices, set_device_mute, clear_device_mute};
 use commands::uptime::{record_uptime, get_uptime_stats, get_all_uptime_stats, clear_uptime_data};
 use commands::export::{export_miners_csv, export_alert_history_csv, export_profitability_csv, export_farm_history_csv};
@@ -322,6 +322,7 @@ pub fn run() {
             test_smtp_config,
             send_alert_email,
             send_desktop_notification,
+            get_notification_status,
             add_farm_snapshot,
             get_farm_history,
             clear_farm_history,

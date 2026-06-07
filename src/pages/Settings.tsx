@@ -10,6 +10,7 @@ import type { SmtpConfig } from "../types/alerts";
 import obLogo from "../assets/icon.png";
 import { useProfitability } from "../context/ProfitabilityContext";
 import CloudSyncPanel from "../components/CloudSyncPanel";
+import NotificationBanner from "../components/NotificationBanner";
 
 const EMPTY_SMTP: SmtpConfig = {
   smtpHost: "",
@@ -62,6 +63,10 @@ export default function Settings() {
   const [smtpSuccess, setSmtpSuccess] = useState<string | null>(null);
   const [smtpLoaded, setSmtpLoaded] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
+
+  // Desktop notification test state
+  const [testingNotif, setTestingNotif] = useState(false);
+  const [notifMsg, setNotifMsg] = useState<string | null>(null);
 
   useEffect(() => {
     getVersion().then(setCurrentVersion).catch(console.error);
@@ -187,6 +192,22 @@ export default function Settings() {
     } catch (err) {
       setUpdateError(String(err));
       setUpdateInstalling(false);
+    }
+  }
+
+  async function handleTestNotification() {
+    setTestingNotif(true);
+    setNotifMsg(null);
+    try {
+      await invoke("send_desktop_notification", {
+        title: "OverManager test notification",
+        body: "If you can see this, desktop alerts are working.",
+      });
+      setNotifMsg("Test notification sent — check your Windows notifications.");
+    } catch (err) {
+      setNotifMsg(`Error: ${err}`);
+    } finally {
+      setTestingNotif(false);
     }
   }
 
@@ -487,6 +508,31 @@ export default function Settings() {
             </div>
           </div>
         )}
+
+        {/* Desktop Notifications */}
+        <div className="bg-dark-800 rounded-xl border border-slate-700/50 p-6">
+          <div className="mb-5">
+            <h3 className="text-lg font-semibold text-white">Desktop Notifications</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Alert toasts are delivered through Windows notifications.
+            </p>
+          </div>
+          <NotificationBanner />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleTestNotification}
+              disabled={testingNotif}
+              className="px-5 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {testingNotif ? "Sending..." : "Send test notification"}
+            </button>
+            {notifMsg && (
+              <span className={`text-xs ${notifMsg.startsWith("Error") ? "text-red-400" : "text-emerald-400"}`}>
+                {notifMsg}
+              </span>
+            )}
+          </div>
+        </div>
 
         {/* Data Export */}
         <div className="bg-dark-800 rounded-xl border border-slate-700/50 p-6">
