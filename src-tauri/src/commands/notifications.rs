@@ -58,6 +58,49 @@ pub fn setup_windows_aumid(identifier: &str, display_name: &str) {
     }
 }
 
+/// Report whether Windows will actually surface our toasts. When the per-app or
+/// system notification toggle is OFF, `Toast::show()` returns `Ok` but nothing
+/// appears — users have no way to tell. The frontend uses this to show a warning
+/// banner that deep-links to `ms-settings:notifications`.
+///
+/// Returns one of: `enabled`, `disabledForApplication`, `disabledForUser`,
+/// `disabledByGroupPolicy`, `disabledByManifest`, `unknown`.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn get_notification_status(app: tauri::AppHandle) -> Result<String, String> {
+    use windows::core::HSTRING;
+    use windows::UI::Notifications::{NotificationSetting, ToastNotificationManager};
+
+    let identifier = app.config().identifier.clone();
+    let aumid = HSTRING::from(identifier);
+    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&aumid)
+        .map_err(|e| format!("Failed to create toast notifier: {}", e))?;
+    let setting = notifier
+        .Setting()
+        .map_err(|e| format!("Failed to read notification setting: {}", e))?;
+
+    let s = if setting == NotificationSetting::Enabled {
+        "enabled"
+    } else if setting == NotificationSetting::DisabledForApplication {
+        "disabledForApplication"
+    } else if setting == NotificationSetting::DisabledForUser {
+        "disabledForUser"
+    } else if setting == NotificationSetting::DisabledByGroupPolicy {
+        "disabledByGroupPolicy"
+    } else if setting == NotificationSetting::DisabledByManifest {
+        "disabledByManifest"
+    } else {
+        "unknown"
+    };
+    Ok(s.to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn get_notification_status(_app: tauri::AppHandle) -> Result<String, String> {
+    Ok("enabled".to_string())
+}
+
 #[tauri::command]
 pub fn send_desktop_notification(
     app: tauri::AppHandle,
