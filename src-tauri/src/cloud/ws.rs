@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use futures_util::{Sink, SinkExt, StreamExt};
+use tauri::Emitter;
 use tokio_tungstenite::tungstenite::Message;
 
 use super::{command_exec, CloudState, CloudSyncStatus};
@@ -127,7 +128,7 @@ pub async fn start_ws_client(
 /// Parse an incoming WebSocket message and dispatch commands.
 async fn handle_message<S>(
     text: &str,
-    _cloud_state: &Arc<CloudState>,
+    cloud_state: &Arc<CloudState>,
     app_handle: &tauri::AppHandle,
     write: &mut S,
 ) where
@@ -189,6 +190,55 @@ async fn handle_message<S>(
                 log::warn!("Cloud WS: failed to send command ack: {}", e);
             }
         }
+        "alert-read" => {
+            let data = match msg.get("data") {
+                Some(d) => d,
+                None => {
+                    log::warn!("Cloud WS: alert-read message missing 'data' field");
+                    return;
+                }
+            };
+            if !instance_matches(cloud_state, data) {
+                log::debug!("Cloud WS: alert-read for a different instance, ignoring");
+                return;
+            }
+            let rule_name = data.get("ruleName").and_then(|v| v.as_str()).unwrap_or("");
+            let miner_id = data.get("minerId").and_then(|v| v.as_str()).unwrap_or("");
+            let timestamp = data.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
+
+            match crate::commands::alerts::mark_alert_read(rule_name, miner_id, timestamp) {
+                Ok(true) => {
+                    log::info!(
+                        "Cloud WS: alert marked read remotely (rule='{}', miner='{}')",
+                        rule_name,
+                        miner_id
+                    );
+                    let _ = app_handle.emit("alerts-updated", ());
+                }
+                Ok(false) => log::debug!(
+                    "Cloud WS: alert-read had no local match (rule='{}', miner='{}', ts='{}')",
+                    rule_name,
+                    miner_id,
+                    timestamp
+                ),
+                Err(e) => log::warn!("Cloud WS: failed to mark alert read: {}", e),
+            }
+        }
+        "alerts-read-all" => {
+            let data = msg.get("data").cloned().unwrap_or(serde_json::Value::Null);
+            if !instance_matches(cloud_state, &data) {
+                log::debug!("Cloud WS: alerts-read-all for a different instance, ignoring");
+                return;
+            }
+            match crate::commands::alerts::mark_all_alerts_read() {
+                Ok(true) => {
+                    log::info!("Cloud WS: all alerts marked read remotely");
+                    let _ = app_handle.emit("alerts-updated", ());
+                }
+                Ok(false) => log::debug!("Cloud WS: alerts-read-all — nothing to update"),
+                Err(e) => log::warn!("Cloud WS: failed to mark all alerts read: {}", e),
+            }
+        }
         "ping" => {
             // Server-level ping (application layer), respond with pong
             let pong = serde_json::json!({ "type": "pong" });
@@ -199,5 +249,18 @@ async fn handle_message<S>(
         other => {
             log::debug!("Cloud WS: ignoring message type '{}'", other);
         }
+    }
+}
+
+/// Whether a payload's `instanceId` refers to this instance. Lenient: if the
+/// payload omits it or we don't yet know our own instance id, we don't block
+/// (the socket is already scoped to this instance by its apiKey). We only
+/// reject when both are known and differ.
+fn instance_matches(cloud_state: &Arc<CloudState>, data: &serde_json::Value) -> bool {
+    let incoming = data.get("instanceId").and_then(|v| v.as_str());
+    let ours = cloud_state.instance_id.lock().unwrap().clone();
+    match (incoming, ours) {
+        (Some(a), Some(b)) => a == b,
+        _ => true,
     }
 }
