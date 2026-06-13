@@ -321,6 +321,72 @@ pub fn acknowledge_alert(id: String) -> Result<(), String> {
     save_history(&history)
 }
 
+// ─── Remote read-state sync (from cloud WebSocket) ───────────────────────────
+//
+// The cloud broadcasts `alert-read` / `alerts-read-all` when an alert is
+// acknowledged from the web portal or mobile app. We match those against local
+// alerts on (ruleName, minerId, timestamp) — the desktop does not store the
+// cloud's alertId (the POST /alert response is discarded and alerts are
+// delivered via an offline queue), and the local AlertEvent already carries
+// exactly these three fields: `rule_name`, `miner_ip` (the cloud's `minerId`),
+// and `timestamp`. The cloud echoes them in the payload for this purpose.
+
+/// Compare two RFC-3339 timestamps. Falls back to instant equality so a format
+/// difference (e.g. `Z` vs `+00:00`) doesn't prevent a match.
+fn timestamps_match(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    match (
+        chrono::DateTime::parse_from_rfc3339(a),
+        chrono::DateTime::parse_from_rfc3339(b),
+    ) {
+        (Ok(da), Ok(db)) => da == db,
+        _ => false,
+    }
+}
+
+/// Does this local event correspond to the cloud's (ruleName, minerId, timestamp)?
+fn alert_matches(event: &AlertEvent, rule_name: &str, miner_id: &str, timestamp: &str) -> bool {
+    event.rule_name == rule_name
+        && event.miner_ip == miner_id
+        && timestamps_match(&event.timestamp, timestamp)
+}
+
+/// Mark a single local alert acknowledged to mirror a remote read. Matches on
+/// (ruleName, minerId, timestamp). Returns whether any local record changed.
+pub fn mark_alert_read(rule_name: &str, miner_id: &str, timestamp: &str) -> Result<bool, String> {
+    let mut history = load_history();
+    let mut changed = false;
+    for e in history.iter_mut() {
+        if !e.acknowledged && alert_matches(e, rule_name, miner_id, timestamp) {
+            e.acknowledged = true;
+            changed = true;
+        }
+    }
+    if changed {
+        save_history(&history)?;
+    }
+    Ok(changed)
+}
+
+/// Mark all local alerts acknowledged to mirror a remote "mark all read".
+/// Returns whether any local record changed.
+pub fn mark_all_alerts_read() -> Result<bool, String> {
+    let mut history = load_history();
+    let mut changed = false;
+    for e in history.iter_mut() {
+        if !e.acknowledged {
+            e.acknowledged = true;
+            changed = true;
+        }
+    }
+    if changed {
+        save_history(&history)?;
+    }
+    Ok(changed)
+}
+
 #[tauri::command]
 pub fn check_alerts(app: tauri::AppHandle, miners: Vec<MinerSnapshot>) -> Result<Vec<AlertEvent>, String> {
     let rules = load_rules();
@@ -678,4 +744,54 @@ pub fn check_mobile_alerts(app: tauri::AppHandle, miners: Vec<MobileMinerSnapsho
     }
 
     Ok(triggered)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn event(rule: &str, miner: &str, ts: &str) -> AlertEvent {
+        AlertEvent {
+            id: "local-1".to_string(),
+            rule_id: "r1".to_string(),
+            rule_name: rule.to_string(),
+            miner_ip: miner.to_string(),
+            miner_label: "Rig".to_string(),
+            message: "msg".to_string(),
+            timestamp: ts.to_string(),
+            acknowledged: false,
+            notify_desktop: true,
+            notify_email: false,
+        }
+    }
+
+    #[test]
+    fn matches_on_rule_miner_and_timestamp() {
+        let e = event("High Temp", "192.168.1.5", "2026-06-07T10:00:00.123456789+00:00");
+        assert!(alert_matches(&e, "High Temp", "192.168.1.5", "2026-06-07T10:00:00.123456789+00:00"));
+    }
+
+    #[test]
+    fn rejects_on_any_field_mismatch() {
+        let e = event("High Temp", "192.168.1.5", "2026-06-07T10:00:00+00:00");
+        assert!(!alert_matches(&e, "Low Hashrate", "192.168.1.5", "2026-06-07T10:00:00+00:00"));
+        assert!(!alert_matches(&e, "High Temp", "192.168.1.9", "2026-06-07T10:00:00+00:00"));
+        assert!(!alert_matches(&e, "High Temp", "192.168.1.5", "2026-06-07T11:00:00+00:00"));
+    }
+
+    #[test]
+    fn timestamp_match_is_format_tolerant() {
+        // Same instant, different RFC-3339 spelling (Z vs +00:00) still matches.
+        assert!(timestamps_match("2026-06-07T10:00:00Z", "2026-06-07T10:00:00+00:00"));
+        assert!(timestamps_match("2026-06-07T10:00:00.500Z", "2026-06-07T10:00:00.500+00:00"));
+        // Different instants do not.
+        assert!(!timestamps_match("2026-06-07T10:00:00Z", "2026-06-07T10:00:01Z"));
+    }
+
+    #[test]
+    fn mobile_device_id_matches_as_miner_id() {
+        // Mobile alerts carry the device_id in miner_ip; cloud sends it as minerId.
+        let e = event("OverMobile Offline", "device-abc-123", "2026-06-07T10:00:00Z");
+        assert!(alert_matches(&e, "OverMobile Offline", "device-abc-123", "2026-06-07T10:00:00Z"));
+    }
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import type { AlertEvent, AlertRule, RuleType } from "../types/alerts";
@@ -92,6 +93,24 @@ export default function Alerts() {
     invoke<AlertRule[]>("get_alert_rules").then(setRules).catch(console.error);
     invoke<SavedMiner[]>("get_saved_miners").then(setSavedMiners).catch(console.error);
     invoke<MobileMiner[]>("get_mobile_miners").then(setMobileMiners).catch(console.error);
+  }, [loadHistory]);
+
+  // Reload the history table when alerts change — including when an alert is
+  // marked read remotely (from the web portal / mobile app), which the cloud
+  // WebSocket relays and the backend reflects by emitting "alerts-updated".
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    listen("alerts-updated", () => {
+      loadHistory();
+    }).then((h) => {
+      if (cancelled) h();
+      else unlisten = h;
+    });
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
   }, [loadHistory]);
 
   async function handleAcknowledge(id: string) {
