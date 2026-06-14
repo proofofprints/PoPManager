@@ -123,7 +123,7 @@ pub async fn start_sync_loop(
                     match result {
                         Ok(()) => {
                             let _ = queue::remove(item.id);
-                            log::debug!("Cloud sync: drained queue item {} ({})", item.id, item.kind);
+                            log::info!("Cloud sync: pushed queue item {} ({})", item.id, item.kind);
                         }
                         Err(e) => {
                             // Classify error
@@ -134,9 +134,10 @@ pub async fn start_sync_loop(
                             }
                             // Transient or permanent — mark failed
                             let _ = queue::mark_failed(item.id, &e);
-                            log::debug!(
-                                "Cloud sync: queue item {} failed (attempt {}): {}",
+                            log::warn!(
+                                "Cloud sync: queue item {} ({}) push failed (attempt {}): {}",
                                 item.id,
+                                item.kind,
                                 item.attempts + 1,
                                 e
                             );

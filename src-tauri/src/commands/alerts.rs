@@ -562,15 +562,26 @@ pub fn check_alerts(app: tauri::AppHandle, miners: Vec<MinerSnapshot>) -> Result
         }
         save_history(&history)?;
 
-        // Enqueue alerts for cloud sync
-        if let Some(cloud_state) = app.try_state::<Arc<crate::cloud::CloudState>>() {
-            if cloud_state.api_key.lock().unwrap().is_some() {
+        // Enqueue alerts for cloud sync (only when signed in — the push itself
+        // runs on the 60s sync loop). Logged at INFO so it's visible whether
+        // alerts are reaching the cloud or being skipped because we're offline.
+        match app.try_state::<Arc<crate::cloud::CloudState>>() {
+            Some(cloud_state) if cloud_state.api_key.lock().unwrap().is_some() => {
+                let mut enqueued = 0u32;
                 for event in &triggered {
                     if let Ok(payload) = serde_json::to_value(event) {
-                        let _ = crate::cloud::queue::enqueue("alert", &payload);
+                        match crate::cloud::queue::enqueue("alert", &payload) {
+                            Ok(()) => enqueued += 1,
+                            Err(e) => log::warn!("Cloud: failed to enqueue alert: {}", e),
+                        }
                     }
                 }
+                log::info!("Cloud: enqueued {} alert(s) for sync", enqueued);
             }
+            _ => log::info!(
+                "Cloud: not signed in — {} alert(s) NOT sent to cloud",
+                triggered.len()
+            ),
         }
     }
 
@@ -731,15 +742,26 @@ pub fn check_mobile_alerts(app: tauri::AppHandle, miners: Vec<MobileMinerSnapsho
         }
         save_history(&history)?;
 
-        // Enqueue alerts for cloud sync
-        if let Some(cloud_state) = app.try_state::<Arc<crate::cloud::CloudState>>() {
-            if cloud_state.api_key.lock().unwrap().is_some() {
+        // Enqueue alerts for cloud sync (only when signed in — the push itself
+        // runs on the 60s sync loop). Logged at INFO so it's visible whether
+        // alerts are reaching the cloud or being skipped because we're offline.
+        match app.try_state::<Arc<crate::cloud::CloudState>>() {
+            Some(cloud_state) if cloud_state.api_key.lock().unwrap().is_some() => {
+                let mut enqueued = 0u32;
                 for event in &triggered {
                     if let Ok(payload) = serde_json::to_value(event) {
-                        let _ = crate::cloud::queue::enqueue("alert", &payload);
+                        match crate::cloud::queue::enqueue("alert", &payload) {
+                            Ok(()) => enqueued += 1,
+                            Err(e) => log::warn!("Cloud: failed to enqueue alert: {}", e),
+                        }
                     }
                 }
+                log::info!("Cloud: enqueued {} alert(s) for sync", enqueued);
             }
+            _ => log::info!(
+                "Cloud: not signed in — {} alert(s) NOT sent to cloud",
+                triggered.len()
+            ),
         }
     }
 
